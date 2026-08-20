@@ -710,7 +710,8 @@ linux-defconfig:
 		-e DMABUF_HEAPS_CMA \
 		-d MODULES \
 		-e ARM64_64K_PAGES \
-		-d ARM64_4K_PAGES
+		-d ARM64_4K_PAGES \
+		-d QCOM_SCM
 	$(LINUX_EXPORTS) $(MAKE) -C $(LINUX_PATH) olddefconfig
 
 linux: linux-overlays
