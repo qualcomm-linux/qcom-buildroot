@@ -276,10 +276,17 @@ help:
 	@echo "  efi            Build kernel UKI + rootfs → lemans/output/efi.bin (LUN 0)"
 	@echo "  flash-loader   Flash the boot chain via QDL (LUNs 1-5; needs bootimage)"
 	@echo "  flash-kernel   Flash efi.bin via QDL (LUN 0; needs efi)"
+	@echo "  flash-lava     Package a combined boot-chain + kernel tarball for LAVA"
+	@echo "                 (lemans/output/lemans-flash.qcomflash.tar.gz); flash a"
+	@echo "                 remote lab board via LAVA instead of local USB QDL"
+	@echo "  flash-lava-yocto  Package the COMPLETE Yocto release (all 6 LUNs +"
+	@echo "                 rootfs.img) for LAVA (lemans/output/lemans-yocto.qcomflash.tar.gz);"
+	@echo "                 the LAVA counterpart of flash-yocto (needs 'make yocto')"
 	@echo ""
 	@echo "  Typical rebuild + flash:"
 	@echo "    make bootimage && make flash-loader     # boot chain"
 	@echo "    make efi       && make flash-kernel     # kernel + rootfs"
+	@echo "    make bootimage efi && make flash-lava   # both, packaged for LAVA"
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════════"
 	@echo " COMPONENT TARGETS  (sub-builds invoked by the main targets)"
@@ -1040,6 +1047,196 @@ flash-kernel: $(BLOBS_STAMP)
 	fi
 	cd $(CURDIR)/lemans/output && \
 		qdl --debug prog_firehose_ddr.elf rawprogram0-only-kernel.xml patch0.xml
+
+################################################################################
+# flash-lava — Flash the boot chain + kernel to a lab board via LAVA (not USB).
+#
+# flash-loader/flash-kernel run qdl over USB against a board plugged into THIS
+# machine. The LAVA lab boards are remote and not USB-reachable from here, so
+# LAVA cannot run that qdl directly. Instead LAVA fetches a single flat tarball
+# over HTTP onto its worker and runs qdl there (deploy: to: qdl + boot:
+# method: qdl, storage: ufs). This target assembles exactly that tarball,
+# uniting both flash sets so one LAVA job flashes what 'flash-loader' and
+# 'flash-kernel' would flash together:
+#
+#   LUN1–5 (loader): firehose, rawprogram1/2/3/5, rawprogram4-qupfw (qupfw slots
+#           populated), boot FW, GPTs, built tz.mbn + uefi.elf, qupv3fw.elf
+#   LUN0   (kernel): rawprogram0-only-kernel (rootfs stripped), patch0, efi.bin
+#
+# The combined qdl invocation the LAVA qdl boot method runs (storage: ufs):
+#   qdl prog_firehose_ddr.elf \
+#       rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml \
+#       rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml patch0.xml
+#
+# The tarball is flat (files at the root), so the LAVA job leaves 'path' unset.
+# Output: lemans/output/lemans-flash.qcomflash.tar.gz
+#
+# This target only PACKAGES the tarball. Uploading it to a lab-reachable URL and
+# submitting/monitoring the LAVA job is done separately (e.g. via the LAVA MCP),
+# because this host has no artifact web-host or LAVA credentials.
+#
+# NOTE: like flash-loader/flash-kernel, this set does NOT include rootfs.img.
+# A LAVA job that boots to a login prompt only succeeds if a rootfs is already
+# present on the board's rootfs partition (this only reflashes boot + kernel).
+#
+# Depends on the same prerequisites as the two source targets: the fetched blob
+# set ($(BLOBS_STAMP)), linux-firmware (for qupv3fw.elf), and the built
+# tz.mbn + uefi.elf + efi.bin (from 'make bootimage' and 'make efi').
+FLASH_LAVA_DIR   = $(CURDIR)/lemans/output/flash-lava
+FLASH_LAVA_TARBALL = $(CURDIR)/lemans/output/lemans-flash.qcomflash.tar.gz
+
+# The tarball payload: firehose + both LUN sets' rawprograms/GPTs + patch0 +
+# zero-fill, plus the qupfw/kernel rawprogram variants and built artifacts that
+# are generated/copied into FLASH_LAVA_DIR by the recipe below.
+FLASH_LAVA_STATIC_FILES = \
+	$(FIREHOSE) \
+	rawprogram1.xml rawprogram2.xml rawprogram3.xml rawprogram5.xml \
+	patch0.xml \
+	$(BOOT_FW_FILES) zeros_33sectors.bin \
+	$(foreach n,0 1 2 3 4 5,$(call lun-tables,$(n)))
+
+.PHONY: flash-lava flash-lava-package
+
+# Job definitions submitted after packaging (override on the command line, e.g.
+# make flash-lava FLASH_LAVA_JOB=path/to/your.yaml).
+FLASH_LAVA_JOB       ?= $(CURDIR)/lemans/lava/flash-lava.yaml
+FLASH_LAVA_YOCTO_JOB ?= $(CURDIR)/lemans/lava/flash-lava-yocto.yaml
+
+# flash-lava packages the tarball, then hands it to lemans/lava/submit.sh, which
+# uploads it (minting a lab-reachable URL via the LAVA MCP through headless
+# `claude`), submits the LAVA job over the REST API, and monitors it to
+# completion. To only build the tarball without touching the lab, run the
+# flash-lava-package target instead.
+flash-lava: flash-lava-package
+	$(CURDIR)/lemans/lava/submit.sh $(FLASH_LAVA_TARBALL) $(FLASH_LAVA_JOB)
+
+flash-lava-package: $(BLOBS_STAMP) linux-firmware
+	@# Stage the full blob set for both flash paths into lemans/output/, exactly
+	@# as flash-loader + flash-kernel do (strict: hard error on any missing file).
+	$(call stage-blobs-strict,$(LOADER_BLOB_FILES))
+	$(call stage-blobs-strict,$(KERNEL_BLOB_FILES))
+	@# Built boot-chain artifacts must exist (mirrors flash-loader's guards).
+	@if [ ! -f "$(CURDIR)/lemans/output/tz.mbn" ]; then \
+		echo "ERROR: lemans/output/tz.mbn not found — run 'make bootimage' first"; \
+		echo "       (the signed U-Boot SPL is the tz partition image)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(CURDIR)/lemans/output/uefi.elf" ]; then \
+		echo "ERROR: lemans/output/uefi.elf not found — run 'make bootimage' first"; \
+		echo "       (U-Boot proper, loaded by the SPL at 0xaf000000)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(CURDIR)/lemans/output/efi.bin" ]; then \
+		echo "ERROR: lemans/output/efi.bin not found — run 'make efi' first"; \
+		echo "       (the UKI kernel image written to LUN 0)"; \
+		exit 1; \
+	fi
+	@# QUP GENI SE firmware (see flash-loader for the rationale).
+	@if [ -f "$(FW_CLONE_DIR)/$(FW_SOC)/qupv3fw.elf" ]; then \
+		cp -f "$(FW_CLONE_DIR)/$(FW_SOC)/qupv3fw.elf" "$(CURDIR)/lemans/output/qupv3fw.elf"; \
+	else \
+		echo "ERROR: qupv3fw.elf not found; run 'make linux-firmware' first"; \
+		exit 1; \
+	fi
+	@# Assemble a clean flat directory for the tarball.
+	rm -rf $(FLASH_LAVA_DIR)
+	@mkdir -p $(FLASH_LAVA_DIR)
+	@# rawprogram4 with the qupfw_a/qupfw_b slots populated (as flash-loader).
+	@echo "Patching rawprogram4 to populate qupfw_a/qupfw_b with qupv3fw.elf..."
+	@$(call patch-qupfw,$(CURDIR)/lemans/output/rawprogram4.xml,$(FLASH_LAVA_DIR)/rawprogram4-qupfw.xml)
+	@# rawprogram0 with rootfs stripped so only efi.bin is written (as flash-kernel).
+	@echo "Generating rawprogram0-only-kernel.xml (efi only, no rootfs)..."
+	@$(call strip-rootfs,$(CURDIR)/lemans/output/rawprogram0.xml,$(FLASH_LAVA_DIR)/rawprogram0-only-kernel.xml)
+	@# Copy the static payload + built artifacts into the flat dir.
+	@for f in $(FLASH_LAVA_STATIC_FILES) tz.mbn uefi.elf efi.bin qupv3fw.elf; do \
+		if [ ! -f "$(CURDIR)/lemans/output/$$f" ]; then \
+			echo "ERROR: $$f missing from lemans/output/ after staging"; \
+			exit 1; \
+		fi; \
+		cp -f "$(CURDIR)/lemans/output/$$f" "$(FLASH_LAVA_DIR)/$$f"; \
+	done
+	@# Pack the flat tarball LAVA's qdl deploy fetches (gzip; files at root).
+	tar -czf $(FLASH_LAVA_TARBALL) -C $(FLASH_LAVA_DIR) .
+	@echo ""
+	@echo "LAVA flash tarball assembled: $(FLASH_LAVA_TARBALL)"
+	@echo "  Contents (flat): firehose, rawprogram0-only-kernel + rawprogram1/2/3/5"
+	@echo "                   + rawprogram4-qupfw, patch0, GPTs, boot FW,"
+	@echo "                   tz.mbn, uefi.elf, efi.bin, qupv3fw.elf"
+	@echo ""
+	@echo "  Next: upload it to a lab-reachable URL and submit a lemans-evk qdl job"
+	@echo "        (deploy: to: qdl / boot: method: qdl, storage: ufs) — e.g. via the"
+	@echo "        LAVA MCP. rawprogram list for the boot action:"
+	@echo "          rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml"
+	@echo "          rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml  (patch0.xml)"
+	@echo ""
+	@echo "  NOTE: no rootfs.img here (boot chain + kernel only). Booting to a login"
+	@echo "        prompt needs a rootfs already flashed on the board."
+
+################################################################################
+# flash-lava-yocto — Flash the COMPLETE Yocto release to a lab board via LAVA.
+#
+# The LAVA counterpart of 'flash-yocto', as flash-lava is of flash-loader +
+# flash-kernel. Where flash-lava packages the boot chain + kernel only (no
+# rootfs, LUN0 rootfs.img stripped), this packages the full unmodified Yocto
+# release exactly as flash-yocto flashes it: all 6 LUNs INCLUDING rootfs.img,
+# with every patch, straight from the built .qcomflash directory.
+#
+# $(YOCTO_FLASH) (produced by 'make yocto') is already a complete flat flash
+# payload — firehose, rawprogram0–5 + patch0–5, efi.bin, rootfs.img, stock
+# firmware — so, exactly like flash-yocto, nothing is staged or rewritten here:
+# the whole directory is tarred as-is. No rawprogram4-qupfw / rootfs-strip
+# variants (those are flash-lava's boot-chain/kernel-only concern).
+#
+# The combined qdl invocation the LAVA qdl boot method runs (storage: ufs) —
+# identical to flash-yocto's qdl line:
+#   qdl prog_firehose_ddr.elf \
+#       rawprogram0.xml rawprogram1.xml rawprogram2.xml \
+#       rawprogram3.xml rawprogram4.xml rawprogram5.xml \
+#       patch0.xml patch1.xml patch2.xml patch3.xml patch4.xml patch5.xml
+#
+# The tarball is flat (files at the root), so the LAVA job leaves 'path' unset.
+# Output: lemans/output/lemans-yocto.qcomflash.tar.gz
+#
+# Like flash-lava this target only PACKAGES the tarball; uploading it to a
+# lab-reachable URL and submitting/monitoring the LAVA job is done separately
+# (e.g. via the LAVA MCP). Because rootfs.img is included, a LAVA job that boots
+# to a login prompt can succeed on a bare board (unlike flash-lava).
+FLASH_LAVA_YOCTO_TARBALL = $(CURDIR)/lemans/output/lemans-yocto.qcomflash.tar.gz
+
+.PHONY: flash-lava-yocto flash-lava-yocto-package
+
+# Like flash-lava: package the tarball, then upload + submit + monitor via
+# lemans/lava/submit.sh. Run flash-lava-yocto-package alone to only package.
+flash-lava-yocto: flash-lava-yocto-package
+	$(CURDIR)/lemans/lava/submit.sh $(FLASH_LAVA_YOCTO_TARBALL) $(FLASH_LAVA_YOCTO_JOB)
+
+flash-lava-yocto-package:
+	@if [ ! -f "$(YOCTO_FLASH)/prog_firehose_ddr.elf" ]; then \
+		echo "ERROR: Yocto flash image not found at $(YOCTO_FLASH)"; \
+		echo "       Run 'make yocto' first to build the release image."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(YOCTO_FLASH)/rootfs.img" ]; then \
+		echo "ERROR: rootfs.img not found in $(YOCTO_FLASH)"; \
+		echo "       The Yocto flash set is incomplete — re-run 'make yocto'."; \
+		exit 1; \
+	fi
+	@# Pack the whole .qcomflash directory as-is (flat: files at the tarball
+	@# root), exactly the set flash-yocto flashes. gzip, as LAVA's qdl deploy expects.
+	tar -czf $(FLASH_LAVA_YOCTO_TARBALL) -C $(YOCTO_FLASH) .
+	@echo ""
+	@echo "LAVA Yocto flash tarball assembled: $(FLASH_LAVA_YOCTO_TARBALL)"
+	@echo "  Contents (flat): the complete Yocto release — firehose,"
+	@echo "                   rawprogram0-5 + patch0-5, efi.bin, rootfs.img, firmware"
+	@echo ""
+	@echo "  Next: upload it to a lab-reachable URL and submit a lemans-evk qdl job"
+	@echo "        (deploy: to: qdl / boot: method: qdl, storage: ufs) — e.g. via the"
+	@echo "        LAVA MCP. rawprogram/patch lists for the boot action:"
+	@echo "          rawprogram0.xml rawprogram1.xml rawprogram2.xml"
+	@echo "          rawprogram3.xml rawprogram4.xml rawprogram5.xml"
+	@echo "          patch0.xml patch1.xml patch2.xml patch3.xml patch4.xml patch5.xml"
+	@echo ""
+	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
 
 ################################################################################
 # flash-sail — Flash the SAIL (safety-island) NOR image.

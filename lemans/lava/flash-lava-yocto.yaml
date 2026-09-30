@@ -1,0 +1,85 @@
+# LAVA flash job: complete Yocto release (flash-lava-yocto)
+#
+# Companion to `make flash-lava-yocto`, the LAVA counterpart of `flash-yocto`.
+# It packages the COMPLETE unmodified Yocto release — all 6 LUNs INCLUDING
+# rootfs.img, every patch — into lemans/output/lemans-yocto.qcomflash.tar.gz.
+# Because rootfs.img is included, the board is self-sufficient and can boot to
+# a login prompt even if it started bare.
+#
+# ── IMPORTANT: two tarball layouts, two `path:` values ──────────────────────
+# There are two ways to get the tarball, and they nest differently:
+#
+#   A) `make flash-lava-yocto`  → FLAT tarball (`tar -C $(YOCTO_FLASH) .`),
+#      files at the root.  =>  OMIT `path:` and use `rootfs_image: rootfs.img`.
+#
+#   B) Yocto's own emitted     → NESTED under a top-level dir, e.g.
+#      core-image-base-iq-9075-evk.rootfs.qcomflash.tar.gz
+#      `core-image-base-iq-9075-evk/`.  =>  SET `path:` and prefix rootfs_image
+#      (as configured below).
+#
+# This file is written for (A) — the `make flash-lava-yocto` output — so it
+# works out of the box with `make flash-lava-yocto` (which calls submit.sh).
+# To flash Yocto's own emitted tarball instead, set `rootfs_image` to
+# `core-image-base-iq-9075-evk/rootfs.img` and add `path:
+# core-image-base-iq-9075-evk` (both noted inline below).
+#
+# Without the correct `path:`, qdl fails instantly with
+# `failed to open "prog_firehose_ddr.elf" for reading` (the firehose sits in
+# the nested subdir, not the tarball root).
+#
+# Submit + monitor: see README.md in this directory. <ARTIFACT_URL> and
+# <ARTIFACT_TOKEN> are placeholders — substitute the upload's url + token.
+#
+# Validated on hardware: health Complete — flashed all 6 LUNs incl. the
+# ~924 MB rootfs, booted, auto-login succeeded. (An earlier attempt without the
+# correct `path:` failed for the reason described above.)
+
+device_type: lemans-evk
+job_name: lemans-flash-lava-yocto
+priority: medium
+visibility: personal
+timeouts:
+  job:
+    minutes: 45
+  connection:
+    minutes: 5
+actions:
+- deploy:
+    to: qdl
+    # Flat layout — the `make flash-lava-yocto` output (files at the tarball
+    # root). If you instead flash Yocto's OWN emitted *.qcomflash.tar.gz (nested
+    # under core-image-base-iq-9075-evk/), use
+    # `rootfs_image: core-image-base-iq-9075-evk/rootfs.img` and set `path:` below.
+    rootfs_image: rootfs.img
+    qcomflash:
+      url: <ARTIFACT_URL>
+      headers:
+        Authorization: <ARTIFACT_TOKEN>
+    timeout:
+      minutes: 30
+- boot:
+    method: qdl
+    firehose_program: prog_firehose_ddr.elf
+    # Full release: all 6 LUNs + all 6 patches (rootfs.img included via LUN 0).
+    rawprogram: rawprogram0.xml rawprogram1.xml rawprogram2.xml rawprogram3.xml rawprogram4.xml rawprogram5.xml
+    patch: patch0.xml patch1.xml patch2.xml patch3.xml patch4.xml patch5.xml
+    # Flat `make` output → no `path:`. For Yocto's own NESTED tarball, add:
+    #   path: core-image-base-iq-9075-evk
+    storage: ufs
+    debug: true
+    ramdump: true
+    ramdump_timeout: 1800
+    timeout:
+      minutes: 15
+- boot:
+    method: minimal
+    auto_login:
+      login_prompt: 'login:'
+      username: root
+      password_prompt: 'Password'
+      password: oelinux123
+    prompts:
+    - 'root@lemans-evk'
+    - 'root@(.*):[/~]#'
+    timeout:
+      minutes: 15

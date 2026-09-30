@@ -1,0 +1,77 @@
+# LAVA flash job: boot chain + kernel (flash-lava)
+#
+# Companion to `make flash-lava`, which packages the combined boot-chain +
+# kernel payload into lemans/output/lemans-flash.qcomflash.tar.gz (LUNs 0-5,
+# rootfs stripped — see the flash-lava target in lemans.mk). This job flashes
+# that tarball to a remote lemans-evk board via LAVA instead of local USB qdl.
+#
+# NOTE — no rootfs.img in this payload. The board boots the freshly flashed
+# boot chain + kernel, but reaching a login prompt needs a rootfs ALREADY
+# present on the board's rootfs partition. If the board is bare, the qdl flash
+# still passes; only the final login boot will time out. To flash a full,
+# self-sufficient image (rootfs included) use flash-lava-yocto.yaml.
+#
+# path: is NOT set — `make flash-lava` builds a FLAT tarball (files at the
+# root: `tar -C $(FLASH_LAVA_DIR) .`), so qdl runs from the tarball root.
+# (Contrast flash-lava-yocto.yaml, which sets path: because Yocto's own
+# tarball nests everything under a top-level directory.)
+#
+# Submit + monitor: see README.md in this directory. The <ARTIFACT_URL> and
+# <ARTIFACT_TOKEN> below are placeholders — mint them by uploading the tarball
+# (LAVA MCP create_artifact_upload, or any lab-reachable HTTPS host) and
+# substitute the returned url + token before submitting.
+#
+# Validated on hardware: flashed all 6 LUNs and booted to a login prompt.
+
+device_type: lemans-evk
+job_name: lemans-flash-lava
+priority: medium
+# personal: the deploy URL carries the artifact token inline (the MCP could not
+# register a named token), so keep the job private.
+visibility: personal
+timeouts:
+  job:
+    minutes: 40
+  connection:
+    minutes: 5
+actions:
+- deploy:
+    to: qdl
+    qcomflash:
+      url: <ARTIFACT_URL>
+      headers:
+        Authorization: <ARTIFACT_TOKEN>
+    timeout:
+      minutes: 25
+- boot:
+    method: qdl
+    firehose_program: prog_firehose_ddr.elf
+    # Combined boot chain (LUNs 1-5) + kernel (LUN 0, rootfs stripped):
+    # rawprogram0-only-kernel = efi.bin only; rawprogram4-qupfw = qupfw slots
+    # populated with qupv3fw.elf. Matches flash-loader + flash-kernel together.
+    rawprogram: rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml
+    patch: patch0.xml
+    storage: ufs
+    debug: true
+    # Capture a DDR crashdump if the board re-enumerates in EDL crashdump mode.
+    ramdump: true
+    ramdump_timeout: 1800
+    timeout:
+      minutes: 15
+# Optional: confirm the board reaches a Linux login. Only succeeds if a rootfs
+# is already on the board (this payload does not flash one). Drop this action
+# for a flash-only job. Credentials below are for the Yocto distro; adjust for
+# whatever rootfs is actually on the board (e.g. a Buildroot rootfs presents
+# `buildroot login:` and may use different creds).
+- boot:
+    method: minimal
+    auto_login:
+      login_prompt: 'login:'
+      username: root
+      password_prompt: 'Password'
+      password: oelinux123
+    prompts:
+    - 'root@lemans-evk'
+    - 'root@(.*):[/~]#'
+    timeout:
+      minutes: 15
