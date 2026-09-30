@@ -1,0 +1,44 @@
+From 974bf4586ebd2587532ef4189cf2dcee0fb9b41a Mon Sep 17 00:00:00 2001
+From: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+Date: Wed, 30 Sep 2026 09:04:20 +0200
+Subject: [PATCH] iq-9075-evk: install the discrete TPM (TIS-SPI) kernel module
+
+The board advertises the tpm2 machine feature and carries a physical
+TPM 2.0 chip on the SPI bus (the discrete TPM, dTPM), driven by the TCG
+TIS-SPI driver.  The linux-qcom-next kernel already builds that driver
+as a module (CONFIG_TCG_TIS_SPI=m), producing the kernel-module-tpm-tis-spi
+package, but no packagegroup or machine RRECOMMENDS pulls it into the
+rootfs -- so the module is never installed and /dev/tpm* never appears.
+
+Add kernel-module-tpm-tis-spi to MACHINE_EXTRA_RRECOMMENDS so the dTPM
+module lands in the image.  This board uses the dTPM, not the OP-TEE
+firmware TPM (fTPM).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ conf/machine/iq-9075-evk.conf | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/conf/machine/iq-9075-evk.conf b/conf/machine/iq-9075-evk.conf
+index e6ea8c3..cf2f846 100644
+--- a/conf/machine/iq-9075-evk.conf
++++ b/conf/machine/iq-9075-evk.conf
+@@ -37,6 +37,15 @@ MACHINE_EXTRA_RRECOMMENDS += " \
+     fastrpc-tests \
+ "
+ 
++# Discrete TPM (dTPM): the board carries a physical TPM 2.0 chip on the
++# SPI bus, driven by the TCG TIS-SPI driver.  The kernel already builds
++# it as a module (CONFIG_TCG_TIS_SPI=m), but nothing pulls the module
++# package into the image, so /dev/tpm* never appears.  Install it here.
++# This board uses the dTPM, not the OP-TEE firmware TPM (fTPM).
++MACHINE_EXTRA_RRECOMMENDS += " \
++    kernel-module-tpm-tis-spi \
++"
++
+ QCOM_CDT_FILE = "cdt_rb8_core_kit"
+ QCOM_BOOT_FILES_SUBDIR = "qcs9100"
+ QCOM_PARTITION_FILES_SUBDIR ?= "partitions/iq-9075-evk/ufs"
+-- 
+2.43.0
+
