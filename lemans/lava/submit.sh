@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# lemans/lava/submit.sh — upload a flash tarball and submit + monitor a LAVA job.
+# lemans/lava/submit.sh — upload a flash tarball, then flash a lab board.
 #
 # Called automatically by `make flash-lava` / `make flash-lava-yocto` right
-# after the tarball is packaged. Does the four steps `make` cannot do on its
-# own:
+# after the tarball is packaged. Steps `make` cannot do on its own:
 #
 #   1. Mint a lab-reachable upload URL via the LAVA MCP. `make` cannot speak the
 #      MCP protocol, so this shells out to headless `claude -p`, which calls the
@@ -11,12 +10,20 @@
 #      the ONE step that needs the MCP; the LAVA REST API has no upload of its
 #      own and the MCP mint endpoint does not answer plain curl.)
 #   2. Upload the tarball to that URL (plain curl PUT).
-#   3. Fill the job YAML's <ARTIFACT_URL> / <ARTIFACT_TOKEN> and submit it to
-#      the LAVA REST API (Authorization: Token — the header the REST API wants).
-#   4. Poll the job to completion and print its health.
+#   3. Flash the board — ONE of two ways (asked on a terminal, default Yes):
+#        • interactive (default): hand off to connect.sh, which reserves a
+#          board, flashes it once from inside the session container, and opens
+#          its serial console. Press Enter/Y.
+#        • flash-only (answer n, or non-tty): submit a throwaway qdl deploy+boot
+#          job over the LAVA REST API and wait for it to boot remotely.
+#      Either path flashes the board exactly once.
+#   4. (flash-only) Poll the job to completion and print its health.
 #
-# The LAVA API token is read from ~/.claude.json (the same C-Lava-Token the
-# lava MCP server is configured with) — override with $CLAUDE_JSON, or set
+#   FLASH_LAVA_CONNECT=1 forces interactive, =0 forces flash-only.
+#
+# The LAVA API token is read from ~/.claude.json (the same token the lava MCP
+# server is configured with — the X-Lava-Token header, or the older
+# C-Lava-Token; either is accepted) — override with $CLAUDE_JSON, or set
 # $LAVA_TOKEN to bypass the file entirely.
 #
 # Usage: submit.sh <tarball> <job-yaml>
@@ -50,7 +57,10 @@ cands += [p.get("mcpServers", {}) for p in d.get("projects", {}).values()]
 for m in cands:
     lava = m.get("lava")
     if lava:
-        t = lava.get("headers", {}).get("C-Lava-Token")
+        h = lava.get("headers", {})
+        # this lava-mcp build reads X-Lava-Token; older configs/docs used
+        # C-Lava-Token. Accept either so a rename on one side doesn't break us.
+        t = h.get("X-Lava-Token") or h.get("C-Lava-Token")
         if t:
             print(t); break
 PY
@@ -90,7 +100,41 @@ echo ">> [2/4] uploading $FN ($(( SZ/1024/1024 )) MB) ..."
 curl -fsS -T "$TARBALL" -H "Authorization: $UP_TOK" "$GET_URL" >/dev/null
 echo "   stored at $GET_URL"
 
-# --- 3. fill the YAML and submit ----------------------------------------------
+# --- 3. choose how to flash: interactive (default) or one-shot flash-only ------
+# Interactive (default): hand off to connect.sh, which reserves a board, flashes
+# it ONCE from inside the session container (reusing the tarball just uploaded),
+# and drops you on its serial console. Flash-only: submit a throwaway qdl
+# deploy+boot job and wait for it to boot remotely — confirming the flash, but
+# no console. Either way the board is flashed exactly once.
+#   FLASH_LAVA_CONNECT=1 forces interactive, =0 forces flash-only; unset prompts
+#   (default Yes). A non-tty (CI, piped) defaults to flash-only — a console needs
+#   a terminal to attach to.
+CONNECT_SH="$(dirname "$0")/connect.sh"
+interactive=""
+case "${FLASH_LAVA_CONNECT:-}" in
+  1) interactive="yes" ;;
+  0) interactive="" ;;
+  *)
+    if [ -t 0 ] && [ -x "$CONNECT_SH" ]; then
+      echo ""
+      echo "Flash $(basename "$JOB_YAML") how?"
+      echo "  [Y] interactive — reserve a board, flash it, open its serial console (default)"
+      echo "  [n] flash-only  — submit a one-shot flash job and wait for it to boot remotely"
+      printf 'Flash interactively and open the console? [Y/n] '
+      read -r ans || ans=""
+      case "$ans" in [nN]*) interactive="" ;; *) interactive="yes" ;; esac
+    fi
+    ;;
+esac
+
+if [ -n "$interactive" ]; then
+  [ -x "$CONNECT_SH" ] || { echo "ERROR: $CONNECT_SH not found/executable" >&2; exit 1; }
+  echo ">> opening an interactive session (single flash + console) via connect.sh ..."
+  # Reuse the already-uploaded artifact so connect.sh need not re-upload.
+  exec "$CONNECT_SH" "$TARBALL" "$JOB_YAML" "$GET_URL" "$UP_TOK"
+fi
+
+# --- flash-only: fill the YAML and submit --------------------------------------
 # Substitute the placeholders; use a non-/ delimiter since the URL has slashes.
 sed -e "s|<ARTIFACT_URL>|$GET_URL|g" -e "s|<ARTIFACT_TOKEN>|$UP_TOK|g" \
     "$JOB_YAML" > "$TMP/job.yaml"
@@ -108,9 +152,11 @@ JOB_ID="$(echo "$SUB" | jq -r '.job_ids[0]')"
 [ -n "$JOB_ID" ] && [ "$JOB_ID" != null ] || { echo "ERROR: submit failed: $SUB" >&2; exit 1; }
 echo "   submitted job $JOB_ID  ($LAVA_URL/scheduler/job/$JOB_ID)"
 
-# --- 4. monitor ----------------------------------------------------------------
-echo ">> [4/4] monitoring job $JOB_ID ..."
-last=""
+# --- 4. monitor until the board flashes and boots remotely ---------------------
+# The job's final `boot` action waits for a login prompt, so health=Complete
+# confirms the board flashed AND booted.
+echo ">> [4/4] monitoring job $JOB_ID (flashing, then booting to a login prompt) ..."
+last=""; HEALTH=""
 for _ in $(seq 1 "$POLL_MAX"); do
   J="$(curl -fsS -H "Authorization: Token $TOK" "$LAVA_URL/api/v0.3/jobs/$JOB_ID/")"
   state="$(echo "$J" | jq -r '.state')"; health="$(echo "$J" | jq -r '.health')"
@@ -119,9 +165,12 @@ for _ in $(seq 1 "$POLL_MAX"); do
   [ "$now" != "$last" ] && { echo "   $now"; last="$now"; }
   if [ "$state" = "Finished" ]; then
     echo ">> job $JOB_ID finished: health=$health"
-    [ "$health" = "Complete" ] && exit 0 || exit 2
+    HEALTH="$health"; break
   fi
   sleep "$POLL_SECONDS"
 done
-echo "WARNING: job $JOB_ID still running after poll cap; check $LAVA_URL/scheduler/job/$JOB_ID" >&2
-exit 0
+if [ -z "$HEALTH" ]; then
+  echo "WARNING: job $JOB_ID still running after poll cap; check $LAVA_URL/scheduler/job/$JOB_ID" >&2
+  exit 0
+fi
+[ "$HEALTH" = "Complete" ] && exit 0 || exit 2

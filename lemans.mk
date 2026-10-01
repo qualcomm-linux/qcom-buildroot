@@ -278,7 +278,9 @@ help:
 	@echo "  flash-kernel   Flash efi.bin via QDL (LUN 0; needs efi)"
 	@echo "  flash-lava     Package a combined boot-chain + kernel tarball for LAVA"
 	@echo "                 (lemans/output/lemans-flash.qcomflash.tar.gz); flash a"
-	@echo "                 remote lab board via LAVA instead of local USB QDL"
+	@echo "                 remote lab board via LAVA instead of local USB QDL."
+	@echo "                 Asks (default Y) to flash interactively + open the board"
+	@echo "                 console; answer n for a one-shot flash-only job"
 	@echo "  flash-lava-yocto  Package the COMPLETE Yocto release (all 6 LUNs +"
 	@echo "                 rootfs.img) for LAVA (lemans/output/lemans-yocto.qcomflash.tar.gz);"
 	@echo "                 the LAVA counterpart of flash-yocto (needs 'make yocto')"
@@ -1104,9 +1106,13 @@ FLASH_LAVA_YOCTO_JOB ?= $(CURDIR)/lemans/lava/flash-lava-yocto.yaml
 
 # flash-lava packages the tarball, then hands it to lemans/lava/submit.sh, which
 # uploads it (minting a lab-reachable URL via the LAVA MCP through headless
-# `claude`), submits the LAVA job over the REST API, and monitors it to
-# completion. To only build the tarball without touching the lab, run the
-# flash-lava-package target instead.
+# `claude`) and then flashes a lab board. On a terminal it asks how to flash
+# (default Y): interactively — reserve a board, flash it once from inside the
+# session container, and open its serial console (lemans/lava/connect.sh) — or
+# answer n for a one-shot flash-only job submitted over the REST API and polled
+# to completion. FLASH_LAVA_CONNECT=1 forces interactive, =0 forces flash-only
+# (also the default for non-tty/CI). To only build the tarball without touching
+# the lab, run the flash-lava-package target instead.
 flash-lava: flash-lava-package
 	$(CURDIR)/lemans/lava/submit.sh $(FLASH_LAVA_TARBALL) $(FLASH_LAVA_JOB)
 

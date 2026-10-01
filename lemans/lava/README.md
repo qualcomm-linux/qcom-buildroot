@@ -90,18 +90,26 @@ proxy in front of the same LAVA instance. It is configured per-project in
 "lava": {
   "type": "http",
   "url": "https://lava.infra.foundries.io/mcp",
-  "headers": { "C-Lava-Token": "<your-lava-token>" }
+  "headers": { "X-Lava-Token": "<your-lava-token>" }
 }
 ```
 
 Add/update it with:
 ```sh
 claude mcp add --transport http lava https://lava.infra.foundries.io/mcp \
-  --header "C-Lava-Token: <your-lava-token>"
+  --header "X-Lava-Token: <your-lava-token>"
 ```
 It is the **same token** as the REST one, but the MCP expects it in the
-**`C-Lava-Token`** header (not `Authorization`). After changing it, reload with
+**`X-Lava-Token`** header (not `Authorization`). After changing it, reload with
 `/mcp` (reconnect) or restart, so the running session picks up the header.
+
+> **Header name matters.** This lava-mcp build reads **`X-Lava-Token`**. An
+> earlier revision of this doc used `C-Lava-Token`, which this server ignores —
+> the token is then dropped, `whoami` returns an empty user, and every MCP
+> **write** tool (`submit_job`, `open_board_session`, …) 403s with
+> "Authentication credentials were not provided", while reads and
+> `create_artifact_upload` still work. If writes 403, check this header first.
+> (`submit.sh`/`connect.sh` accept either name when reading the token for REST.)
 
 What the MCP is good for here:
 - **Reads** (`list_devices`, `get_lab_health`, `list_jobs`, `get_job_logs`,
@@ -110,14 +118,13 @@ What the MCP is good for here:
   token-guarded upload URL used in Step 1. This is MCP-native and does not need
   LAVA job-submit auth.
 
-⚠️ **Known limitation on this instance:** MCP **write** tools (`submit_job`,
-`cancel_job`, `list_remote_artifact_tokens`) currently **403** — the MCP
-session does not authenticate the LAVA user (`whoami` returns an empty user
-even after `/mcp` reconnect), so job submission through the MCP fails. The
-token itself is valid, so submit/cancel/monitor via the **REST API** with
-`Authorization: Token` as in Steps 2–3. If a future MCP build forwards the
-token correctly (`whoami` returns your username), `submit_job` can replace the
-REST `curl` and the rest of the flow is unchanged.
+✅ **Writes work once the header is right.** With `X-Lava-Token` (above),
+`whoami` returns your username and the MCP **write** tools (`submit_job`,
+`cancel_job`, `open_board_session`, …) authenticate as you. The earlier
+"writes 403" note here was the `C-Lava-Token` symptom, not a server bug — see
+the header warning above. `submit.sh` still submits/monitors over the **REST
+API** (`Authorization: Token`) because `make` cannot speak MCP; the interactive
+session (`connect.sh`) uses the MCP write tools directly.
 
 ## Step 1 — host the tarball where the lab can fetch it
 
@@ -140,9 +147,9 @@ Any other lab-reachable HTTPS host works too (artifactory/S3/etc.); just point
 
 ## Step 2 — submit
 
-**The LAVA MCP `submit_job` tool currently 403s** on this instance — the MCP
-session does not authenticate (`whoami` returns empty even after reconnecting).
-The token itself is valid, so submit via the REST API directly:
+The MCP `submit_job` tool works once the `X-Lava-Token` header is set (see the
+MCP section above). `submit.sh` nevertheless submits over the **REST API** —
+`make` cannot speak MCP, and REST needs no MCP session. To submit by hand:
 
 ```sh
 JOB=flash-lava-yocto.yaml          # or flash-lava.yaml, with placeholders filled in
@@ -199,6 +206,67 @@ Wrong `path:` → qdl fails at once with
 
 `flash-lava-yocto.yaml` is written for Yocto's own (nested) tarball; comments
 in it say exactly what to change for the flat `make` output.
+
+## Flashing: interactive (default) vs flash-only
+
+After uploading the tarball, `make flash-lava` / `make flash-lava-yocto` ask —
+on a terminal — how to flash:
+
+```
+Flash flash-lava.yaml how?
+  [Y] interactive — reserve a board, flash it, open its serial console (default)
+  [n] flash-only  — submit a one-shot flash job and wait for it to boot remotely
+Flash interactively and open the console? [Y/n]
+```
+
+Either path flashes the board **exactly once**.
+
+- **Enter / Y → interactive** — `lemans/lava/connect.sh` reserves a board and
+  flashes it, then drops you on its serial console (see below).
+- **n → flash-only** — submits a throwaway qdl deploy+boot job over the LAVA REST
+  API and polls it to `health: Complete` (which means it flashed *and* booted to
+  a login prompt), then releases the board. No console.
+- **non-tty** (CI, piped stdin) defaults to **flash-only** — a console needs a
+  terminal to attach to.
+- `FLASH_LAVA_CONNECT=1` forces interactive, `=0` forces flash-only (no prompt).
+
+### Interactive session (connect.sh)
+
+`connect.sh` talks to the LAVA MCP directly over JSON-RPC with `curl` (so the
+`X-Lava-Token` header must be correct — see the MCP section above):
+
+1. `open_board_session(lemans-evk, console=true, downloads=[<the tarball>])` —
+   reserves a board and a Debian container next to it (board USB + serial mapped
+   in), and pre-stages the tarball at `/lava-downloads` (the container can't
+   fetch the token-guarded URL itself, so LAVA stages it).
+2. `run_device_command qdl_enter` — forces the board into EDL (this device's
+   user command runs tac-api `bootToEDL`; there is no generic `recovery_mode`).
+   Override the command name with `FLASH_LAVA_EDL_CMD` for a differently-wired
+   board.
+3. `run_in_session "tar -xzf … && qdl …"` — flashes the board over USB **from
+   inside the container**, so the board you log into is the one you flashed.
+   The qdl arg list (firehose/rawprogram/patch and any nested `path:`) is parsed
+   from the **same job YAML**, so flat vs nested is handled automatically.
+4. `attach_console` — `ssh -W` to the board's UART through the gateway, run
+   under `socat` for a raw tty. You watch it boot and get a login prompt.
+5. On exit, `close_board_session` **auto-releases the board** (don't leave it
+   held for the 60-min job timeout).
+
+Controls / knobs:
+- `connect.sh <tarball> <job-yaml>` runs standalone (uploads the tarball itself
+  if no `get_url`/token is passed).
+- Raw-console escape is **`Ctrl-]`**; exiting the console releases the board.
+
+Prerequisites (connect.sh installs/falls back automatically):
+- **`websocat`** — required for the SSH gateway tunnel (`ProxyCommand`). If
+  missing it is fetched to `~/.local/bin`.
+- **`socat`** — for a raw interactive tty. If missing, connect.sh falls back to
+  a line-buffered `ssh -W`; `sudo apt-get install -y socat` for the full
+  experience.
+
+If connect.sh dies without cleaning up, release the board manually: the LAVA MCP
+`close_board_session(session_id)`, or cancel the job
+(`curl …/jobs/<id>/cancel/`). `list_board_sessions` shows sessions you own.
 
 ## Login credentials
 
