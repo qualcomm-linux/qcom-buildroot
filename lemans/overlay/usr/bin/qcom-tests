@@ -7,6 +7,8 @@
 #   2) CDSP  FastRPC  — fastrpc_test -d 3 -U 0  (OP-TEE PAS bring-up of cDSP)
 #   3) VIDEO round-trip — encode→decode in one pipeline (iris/venus codec)
 #   4) CPU stress     — saturate every core for STRESS_SECS (soak/thermal test)
+#   5) ADSP restart   — stop/start aDSP via remoteproc sysfs (PAS teardown+reload)
+#   6) CDSP restart   — stop/start cDSP via remoteproc sysfs (PAS teardown+reload)
 #
 # Env: FRAMES (encode frame count, default 100).
 #      STRESS_SECS (CPU stress duration in seconds, default 7200 = 2h).
@@ -40,6 +42,49 @@ test_adsp() {
 
 test_cdsp() {
 	fastrpc_test -d 3 -U 0
+}
+
+# Resolve a remoteproc instance by its advertised name (e.g. "adsp", "cdsp").
+# The remoteprocN index is enumeration-order and not stable, so match on the
+# 'name' sysfs attribute instead. Echoes the sysfs dir on success.
+rproc_find() {
+	want="$1"
+	for d in /sys/class/remoteproc/remoteproc*; do
+		[ -r "$d/name" ] || continue
+		if [ "$(cat "$d/name" 2>/dev/null)" = "$want" ]; then
+			echo "$d"
+			return 0
+		fi
+	done
+	echo "qcom-tests: no remoteproc named '$want'" >&2
+	return 1
+}
+
+# Stop then start a remote processor through remoteproc sysfs and confirm it
+# comes back 'running'. Exercises the full OP-TEE PAS teardown + reload path
+# (shutdown releases the subsystem; start re-authenticates and boots the FW).
+rproc_restart() {
+	want="$1"
+	d=$(rproc_find "$want") || return 1
+	echo "[rproc] $want at $d (state: $(cat "$d/state" 2>/dev/null))"
+
+	echo "[rproc] stopping $want"
+	echo stop > "$d/state" || { echo "qcom-tests: stop $want failed" >&2; return 1; }
+
+	echo "[rproc] starting $want"
+	echo start > "$d/state" || { echo "qcom-tests: start $want failed" >&2; return 1; }
+
+	state=$(cat "$d/state" 2>/dev/null)
+	echo "[rproc] $want state: $state"
+	[ "$state" = "running" ]
+}
+
+test_adsp_restart() {
+	rproc_restart adsp
+}
+
+test_cdsp_restart() {
+	rproc_restart cdsp
 }
 
 # Encode then decode in a single pipeline (no intermediate file) — exercises the
@@ -137,6 +182,8 @@ sel_1=0
 sel_2=0
 sel_3=0
 sel_4=0
+sel_5=0
+sel_6=0
 
 prompt_selection() {
 	echo "Select tests to run:"
@@ -144,6 +191,8 @@ prompt_selection() {
 	echo "  2) CDSP  FastRPC  (-d 3 -U 0)"
 	echo "  3) VIDEO round-trip (encode->decode)"
 	echo "  4) CPU stress (${STRESS_SECS}s soak/thermal)"
+	echo "  5) ADSP restart (remoteproc stop/start)"
+	echo "  6) CDSP restart (remoteproc stop/start)"
 	echo "  a) all            q) quit"
 	printf "Choice> "
 	read -r sel || exit 0
@@ -159,7 +208,9 @@ parse_selection() {
 			2) sel_2=1 ;;
 			3) sel_3=1 ;;
 			4) sel_4=1 ;;
-			a | A | all | ALL) sel_1=1; sel_2=1; sel_3=1; sel_4=1 ;;
+			5) sel_5=1 ;;
+			6) sel_6=1 ;;
+			a | A | all | ALL) sel_1=1; sel_2=1; sel_3=1; sel_4=1; sel_5=1; sel_6=1 ;;
 			q | Q | quit) exit 0 ;;
 			*) echo "qcom-tests: ignoring unknown choice '$tok'" >&2 ;;
 		esac
@@ -169,7 +220,7 @@ parse_selection() {
 prompt_selection
 parse_selection "$sel"
 
-if [ $((sel_1 + sel_2 + sel_3 + sel_4)) -eq 0 ]; then
+if [ $((sel_1 + sel_2 + sel_3 + sel_4 + sel_5 + sel_6)) -eq 0 ]; then
 	echo "qcom-tests: no valid tests selected" >&2
 	exit 1
 fi
@@ -178,6 +229,8 @@ fi
 [ "$sel_2" -eq 1 ] && run "2) CDSP  FastRPC  (-d 3 -U 0)" test_cdsp
 [ "$sel_3" -eq 1 ] && run "3) VIDEO round-trip (encode->decode)" test_roundtrip
 [ "$sel_4" -eq 1 ] && run "4) CPU stress (${STRESS_SECS}s soak)" test_stress
+[ "$sel_5" -eq 1 ] && run "5) ADSP restart (remoteproc stop/start)" test_adsp_restart
+[ "$sel_6" -eq 1 ] && run "6) CDSP restart (remoteproc stop/start)" test_cdsp_restart
 
 echo "=================================================================="
 echo "qcom-tests: $pass passed, $fail failed"
