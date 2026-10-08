@@ -15,6 +15,7 @@ top-level makefile and subdirectory.
 | Platform | SoC | Board | Makefile |
 |----------|-----|-------|----------|
 | Lemans | QCS9100 | Qualcomm IQ-9075 EVK | `lemans.mk` |
+| Kodiak | QCM6490 | Qualcomm RB3 Gen2 | `kodiak.mk` |
 
 ## Quick start
 

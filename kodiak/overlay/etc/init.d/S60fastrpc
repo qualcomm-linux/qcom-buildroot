@@ -1,0 +1,90 @@
+#!/bin/sh
+#
+# S60fastrpc - Start FastRPC daemons for each DSP, once its device node exists.
+#
+# Mirrors the systemd services shipped by meta-qcom's fastrpc recipe:
+#   adsprpcd.service, adsprpcd_audiopd.service, cdsprpcd.service,
+#   cdsp1rpcd.service, sdsprpcd.service, gdsp0rpcd.service, gdsp1rpcd.service
+#
+# The /dev/fastrpc-* nodes are created asynchronously: a DSP must boot AND its
+# GLINK fastrpc channel must finish opening before the misc device registers,
+# which happens well after this script runs at boot. So rather than checking
+# once (and skipping everything), we WAIT for each node up to a shared deadline.
+# The whole sequence is backgrounded so it never blocks the rest of boot. cDSP
+# is checked first so its daemon starts as soon as the node appears.
+#
+
+FASTRPC_NODE_TIMEOUT=${FASTRPC_NODE_TIMEOUT:-30}
+
+node_present() {
+    for d in $1; do
+        [ -e "$d" ] && return 0
+    done
+    return 1
+}
+
+# start_daemon "desc" "node1 node2 ..." cmd [args...]
+start_daemon() {
+    desc="$1"; devs="$2"; shift 2
+    while ! node_present "$devs"; do
+        [ "$(date +%s)" -ge "$DEADLINE" ] && {
+            echo "Skipping $desc (no device node after ${FASTRPC_NODE_TIMEOUT}s)"
+            return
+        }
+        sleep 1
+    done
+    echo "Starting $desc..."
+    "$@" &
+}
+
+run_all() {
+    DEADLINE=$(( $(date +%s) + FASTRPC_NODE_TIMEOUT ))
+
+    start_daemon "cDSP RPC daemon" \
+        "/dev/fastrpc-cdsp /dev/fastrpc-cdsp-secure" \
+        /usr/bin/cdsprpcd
+
+    start_daemon "cDSP1 RPC daemon" \
+        "/dev/fastrpc-cdsp1 /dev/fastrpc-cdsp1-secure" \
+        /usr/bin/cdsprpcd rootpd cdsp1
+
+    start_daemon "aDSP RPC daemon" \
+        "/dev/fastrpc-adsp /dev/fastrpc-adsp-secure" \
+        /usr/bin/adsprpcd
+
+    start_daemon "aDSP audio PD daemon" \
+        "/dev/fastrpc-adsp /dev/fastrpc-adsp-secure" \
+        /usr/bin/adsprpcd audiopd
+
+    start_daemon "sDSP RPC daemon" \
+        "/dev/fastrpc-sdsp /dev/fastrpc-sdsp-secure" \
+        /usr/bin/sdsprpcd
+
+    start_daemon "gDSP0 RPC daemon" \
+        "/dev/fastrpc-gdsp0 /dev/fastrpc-gdsp0-secure" \
+        /usr/bin/gdsprpcd rootpd gdsp0
+
+    start_daemon "gDSP1 RPC daemon" \
+        "/dev/fastrpc-gdsp1 /dev/fastrpc-gdsp1-secure" \
+        /usr/bin/gdsprpcd rootpd gdsp1
+}
+
+case "$1" in
+    start)
+        # Background the whole thing: nodes appear asynchronously and we must
+        # not block boot while waiting for them.
+        run_all &
+        ;;
+    stop)
+        echo "Stopping FastRPC daemons..."
+        kill $(pidof adsprpcd cdsprpcd sdsprpcd gdsprpcd) 2>/dev/null
+        ;;
+    restart)
+        "$0" stop
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

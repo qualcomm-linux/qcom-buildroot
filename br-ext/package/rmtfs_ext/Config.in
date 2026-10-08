@@ -1,0 +1,15 @@
+config BR2_PACKAGE_RMTFS_EXT
+	bool "rmtfs"
+	depends on BR2_PACKAGE_HAS_UDEV
+	select BR2_PACKAGE_QRTR_EXT
+	help
+	  Qualcomm Remote Filesystem service (rmtfs). Serves the DSP /
+	  peripheral persistent (EFS) storage over QRTR. Needed for the
+	  ADSP protection domains to come up; without it ADSP FastRPC
+	  stalls on a GLINK intent timeout even though the remoteproc
+	  authenticates and boots.
+
+	  Requires a udev provider (eudev) for libudev and for the
+	  /dev/disk/by-partlabel/rmtfs symlink used by "rmtfs -P".
+
+	  https://github.com/linux-msm/rmtfs

@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# S42rmtfs - Qualcomm Remote Filesystem service for the DSP subsystems.
+#
+# Serves the peripherals' persistent (EFS) storage over QRTR. The ADSP
+# protection domains need it to finish coming up; without it ADSP FastRPC
+# stalls (GLINK intent timeout). Started after S41tqftpserv and before
+# S60fastrpc. "-r -P -s": read-only fallback, use storage partitions
+# (/dev/disk/by-partlabel/rmtfs via udev), and stay attached.
+#
+
+RMTFS=$(command -v rmtfs 2>/dev/null)
+
+case "$1" in
+    start)
+        if [ -n "$RMTFS" ]; then
+            echo "Starting rmtfs..."
+            "$RMTFS" -r -P -s &
+        else
+            echo "rmtfs not installed, skipping"
+        fi
+        ;;
+    stop)
+        kill $(pidof rmtfs) 2>/dev/null
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

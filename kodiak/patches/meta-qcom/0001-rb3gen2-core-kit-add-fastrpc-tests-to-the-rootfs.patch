@@ -1,0 +1,26 @@
+From: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+Subject: [PATCH] rb3gen2-core-kit: add fastrpc-tests to the rootfs
+
+Pull the fastrpc recipe's -tests subpackage (fastrpc_test binary + DSP
+skel libs) into the rb3gen2-core-kit image via MACHINE_EXTRA_RRECOMMENDS,
+to validate the FastRPC/PAS DSP path on this board.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+diff --git a/conf/machine/rb3gen2-core-kit.conf b/conf/machine/rb3gen2-core-kit.conf
+index 0261c609..5fbe2b2b 100644
+--- a/conf/machine/rb3gen2-core-kit.conf
++++ b/conf/machine/rb3gen2-core-kit.conf
+@@ -31,6 +31,12 @@ MACHINE_ESSENTIAL_EXTRA_RRECOMMENDS += " \
+     qps615-dlkm \
+ "
+ 
++# fastrpc_test binary + DSP skel libs (the fastrpc recipe's -tests
++# subpackage), for validating the FastRPC/PAS DSP path on this board.
++MACHINE_EXTRA_RRECOMMENDS += " \
++    fastrpc-tests \
++"
++
+ QCOM_CDT_FILE = "cdt_core_kit"
+ QCOM_BOOT_FILES_SUBDIR = "qcm6490"
+ QCOM_PARTITION_FILES_SUBDIR ?= "partitions/qcs6490-rb3gen2/ufs"

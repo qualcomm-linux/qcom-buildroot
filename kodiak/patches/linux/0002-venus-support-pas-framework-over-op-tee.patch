@@ -1,0 +1,583 @@
+From: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+Subject: [PATCH] venus: support PAS framework over OP-TEE
+
+Port of ldts/linux 01bf18c81 onto the pinned kernel: select OP-TEE via the
+/firmware/optee DT node (use_tz enum) and load/auth venus firmware through
+the PAS path (qcom_mdt_load + qcom_pas_auth_and_reset). One adaptation vs
+the original: the QTEE-fallback qcom_scm_set_remote_state() (removed from
+this tree) is replaced with qcom_pas_set_remote_state(); the OP-TEE path on
+kodiak does not hit it.
+
+Signed-off-by: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 0ca1ac743..3030bef8a 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -129,6 +129,13 @@ struct venus_format {
+ 	u32 flags;
+ };
+ 
++
++enum venus_trust_zone {
++	VENUS_NO_TZ			= 0,
++	VENUS_TZ_QTEE			= 1,
++	VENUS_TZ_OPTEE			= 2,
++};
++
+ /**
+  * struct venus_core - holds core parameters valid for all instances
+  *
+@@ -210,7 +217,7 @@ struct venus_core {
+ 	struct device *dev;
+ 	struct device *dev_dec;
+ 	struct device *dev_enc;
+-	unsigned int use_tz;
++	enum venus_trust_zone use_tz;
+ 	struct video_firmware {
+ 		struct device *dev;
+ 		struct iommu_domain *iommu_domain;
+diff --git a/drivers/media/platform/qcom/venus/firmware.c b/drivers/media/platform/qcom/venus/firmware.c
+index 964c37b97..ab7880cc9 100644
+--- a/drivers/media/platform/qcom/venus/firmware.c
++++ b/drivers/media/platform/qcom/venus/firmware.c
+@@ -9,6 +9,7 @@
+ #include <linux/iommu.h>
+ #include <linux/io.h>
+ #include <linux/of.h>
++#include <linux/of_address.h>
+ #include <linux/of_reserved_mem.h>
+ #include <linux/platform_device.h>
+ #include <linux/of_device.h>
+@@ -16,7 +17,6 @@
+ #include <linux/firmware/qcom/qcom_scm.h>
+ #include <linux/sizes.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+-#include <dt-bindings/media/qcom,qcs615-venus.h>
+ 
+ #include "core.h"
+ #include "firmware.h"
+@@ -60,146 +60,152 @@ int venus_set_hw_state(struct venus_core *core, bool resume)
+ 	int ret;
+ 
+ 	if (core->use_tz) {
+-		ret = qcom_pas_set_remote_state(resume, VENUS_PAS_ID);
+-		if (resume && ret == -EINVAL)
+-			ret = 0;
++		if (core->use_tz == VENUS_TZ_OPTEE) {
++			if (resume)
++				ret = qcom_pas_auth_and_reset(VENUS_PAS_ID);
++			else
++				ret = qcom_pas_shutdown(VENUS_PAS_ID);
++		} else {
++			ret = qcom_pas_set_remote_state(resume, VENUS_PAS_ID);
++			if (resume && ret == -EINVAL)
++				ret = 0;
++		}
++
+ 		return ret;
+ 	}
+ 
+ 	if (resume) {
++
+ 		venus_reset_cpu(core);
+-	} else {
+-		if (IS_IRIS2(core) || IS_IRIS2_1(core))
+-			writel(WRAPPER_XTSS_SW_RESET_BIT,
+-			       core->wrapper_tz_base + WRAPPER_TZ_XTSS_SW_RESET);
+-		else
+-			writel(WRAPPER_A9SS_SW_RESET_BIT,
+-			       core->wrapper_base + WRAPPER_A9SS_SW_RESET);
++		return 0;
+ 	}
+ 
++	if (IS_IRIS2(core) || IS_IRIS2_1(core))
++		writel(WRAPPER_XTSS_SW_RESET_BIT,
++		       core->wrapper_tz_base + WRAPPER_TZ_XTSS_SW_RESET);
++	else
++		writel(WRAPPER_A9SS_SW_RESET_BIT,
++		       core->wrapper_base + WRAPPER_A9SS_SW_RESET);
++
+ 	return 0;
+ }
+ 
+-static int venus_load_fw_prepare(struct venus_core *core, const char *fwname,
+-				 phys_addr_t *mem_phys, size_t *res_size,
+-				 const struct firmware **mdt)
++static int venus_load_fw(struct venus_core *core, const char *fwname,
++			 phys_addr_t *mem_phys, size_t *mem_size)
+ {
+-	struct resource res;
++	const struct firmware *mdt;
++	struct reserved_mem *rmem;
++	struct device_node *node;
++	struct device *dev;
+ 	ssize_t fw_size;
++	void *mem_va;
+ 	int ret;
+ 
+-	ret = of_reserved_mem_region_to_resource(core->dev->of_node, 0, &res);
+-	if (ret) {
+-		dev_err(core->dev, "failed to lookup reserved memory-region\n");
++	*mem_phys = 0;
++	*mem_size = 0;
++
++	dev = core->dev;
++	node = of_parse_phandle(dev->of_node, "memory-region", 0);
++	if (!node) {
++		dev_err(dev, "no memory-region specified\n");
+ 		return -EINVAL;
+ 	}
+ 
+-	*mem_phys = res.start;
+-	*res_size = resource_size(&res);
++	rmem = of_reserved_mem_lookup(node);
++	of_node_put(node);
++	if (!rmem) {
++		dev_err(dev, "failed to lookup reserved memory-region\n");
++		return -EINVAL;
++	}
+ 
+-	ret = request_firmware(mdt, fwname, core->dev);
+-	if (ret < 0) {
+-		dev_err(core->dev, "%s: request_firmware: %d\n", __func__, ret);
++	ret = request_firmware(&mdt, fwname, dev);
++	if (ret < 0)
+ 		return ret;
+-	}
+ 
+-	fw_size = qcom_mdt_get_size(*mdt);
++	fw_size = qcom_mdt_get_size(mdt);
+ 	if (fw_size < 0) {
+ 		ret = fw_size;
+-		goto err_release;
++		goto err_release_fw;
+ 	}
+ 
+-	if (*res_size < fw_size || fw_size > VENUS_FW_MEM_SIZE) {
++	*mem_phys = rmem->base;
++	*mem_size = rmem->size;
++
++	if (*mem_size < fw_size || fw_size > VENUS_FW_MEM_SIZE) {
+ 		ret = -EINVAL;
+-		goto err_release;
++		goto err_release_fw;
+ 	}
+ 
+-	return 0;
++	mem_va = memremap(*mem_phys, *mem_size, MEMREMAP_WC);
++	if (!mem_va) {
++		dev_err(dev, "unable to map memory region %pa size %#zx\n", mem_phys, *mem_size);
++		ret = -ENOMEM;
++		goto err_release_fw;
++	}
+ 
+-err_release:
+-	release_firmware(*mdt);
++	if (core->use_tz)
++		ret = qcom_mdt_load(dev, mdt, fwname, VENUS_PAS_ID,
++					    mem_va, *mem_phys, *mem_size, NULL);
++	else
++		ret = qcom_mdt_load_no_init(dev, mdt, fwname, mem_va,
++					    *mem_phys, *mem_size, NULL);
++	memunmap(mem_va);
++err_release_fw:
++	release_firmware(mdt);
+ 	return ret;
+ }
+ 
+-static int venus_load_fw(struct venus_core *core,
+-			 const struct firmware *mdt, const char *fwname,
+-			 phys_addr_t mem_phys, size_t res_size)
++static int venus_boot_no_tz(struct venus_core *core, phys_addr_t mem_phys,
++			    size_t mem_size)
+ {
+-	struct qcom_pas_context *ctx;
++	struct iommu_domain *iommu;
+ 	struct device *dev;
+ 	int ret;
+ 
+-	dev = core->fw.dev ? core->fw.dev : core->dev;
+-	ctx = devm_qcom_pas_context_alloc(dev, VENUS_PAS_ID, mem_phys, res_size);
+-	if (!ctx) {
+-		dev_err(core->dev, "%s: ctx is null\n", __func__);
+-		return -ENOMEM;
+-	}
++	dev = core->fw.dev;
++	if (!dev)
++		return -EPROBE_DEFER;
+ 
+-	ctx->use_tzmem = !!core->fw.dev;
++	iommu = core->fw.iommu_domain;
++	core->fw.mapped_mem_size = mem_size;
+ 
+-	ret = qcom_mdt_pas_load(ctx, mdt, fwname, NULL);
+-	qcom_pas_metadata_release(ctx);
++	ret = iommu_map(iommu, VENUS_FW_START_ADDR, mem_phys, mem_size,
++			IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
+ 	if (ret) {
+-		dev_err(core->dev, "%s: qcom_mdt_pas_load: %d\n", __func__, ret);
++		dev_err(dev, "could not map video firmware region\n");
+ 		return ret;
+ 	}
+ 
+-	if (core->fw.iommu_domain) {
+-		ret = iommu_map(core->fw.iommu_domain, 0, mem_phys, res_size,
+-				IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
+-		if (ret) {
+-			dev_err(core->dev, "%s: iommu_map: %d\n", __func__, ret);
+-			return ret;
+-		}
+-	}
+-
+-	core->fw.mapped_mem_size = res_size;
+-
+-	ret = qcom_pas_prepare_and_auth_reset(ctx);
+-	if (ret) {
+-		dev_err(core->dev, "%s: qcom_pas_prepare_and_auth_reset: %d\n", __func__, ret);
+-		if (core->fw.iommu_domain)
+-			iommu_unmap(core->fw.iommu_domain, 0, res_size);
+-		core->fw.mapped_mem_size = 0;
+-		return ret;
+-	}
++	venus_reset_cpu(core);
+ 
+-	core->fw.ctx = ctx;
+ 	return 0;
+ }
+ 
+-static int venus_load_fw_no_tz(struct venus_core *core,
+-			       const struct firmware *mdt, const char *fwname,
+-			       phys_addr_t mem_phys, size_t res_size)
++static int venus_boot_tz(struct venus_core *core, phys_addr_t mem_phys,
++			    size_t mem_size)
+ {
+-	void *mem_va;
++	struct iommu_domain *iommu;
++	struct device *dev;
+ 	int ret;
+ 
+-	mem_va = memremap(mem_phys, res_size, MEMREMAP_WC);
+-	if (!mem_va) {
+-		dev_err(core->dev,
+-			"unable to map memory region %pa size %#zx\n", &mem_phys, res_size);
+-		return -ENOMEM;
+-	}
++	if (core->use_tz != VENUS_TZ_OPTEE)
++		return -1;
+ 
+-	ret = qcom_mdt_load_no_init(core->fw.dev, mdt, fwname, mem_va, mem_phys, res_size, NULL);
+-	memunmap(mem_va);
+-	if (ret) {
+-		dev_err(core->dev, "%s: qcom_mdt_load_no_init: %d\n", __func__, ret);
+-		return ret;
+-	}
++	dev = core->fw.dev;
++	if (!dev)
++		return -EPROBE_DEFER;
+ 
+-	ret = iommu_map(core->fw.iommu_domain, VENUS_FW_START_ADDR, mem_phys,
+-			res_size, IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
++	iommu = core->fw.iommu_domain;
++	core->fw.mapped_mem_size = mem_size;
++
++	ret = iommu_map(iommu, VENUS_FW_START_ADDR, mem_phys, mem_size,
++			IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
+ 	if (ret) {
+-		dev_err(core->dev, "could not map video firmware region\n");
++		dev_err(dev, "could not map video firmware region\n");
+ 		return ret;
+ 	}
+ 
+-	core->fw.mapped_mem_size = res_size;
+-	venus_reset_cpu(core);
+-	return 0;
++	return 	qcom_pas_auth_and_reset(VENUS_PAS_ID);
+ }
+ 
+ static int venus_shutdown_no_tz(struct venus_core *core)
+@@ -238,6 +244,37 @@ static int venus_shutdown_no_tz(struct venus_core *core)
+ 	return 0;
+ }
+ 
++static int venus_shutdown_tee(struct venus_core *core)
++{
++	const size_t mapped = core->fw.mapped_mem_size;
++	struct iommu_domain *iommu;
++	size_t unmapped;
++	struct device *dev = core->fw.dev;
++	int ret;
++
++	if (core->use_tz != VENUS_TZ_OPTEE)
++		return -1;
++
++	ret = qcom_pas_shutdown(VENUS_PAS_ID);
++	if (ret) {
++		dev_err(dev, "failed to shutdown venus\n");
++		return ret;
++	}
++
++	iommu = core->fw.iommu_domain;
++
++	if (core->fw.mapped_mem_size && iommu) {
++		unmapped = iommu_unmap(iommu, VENUS_FW_START_ADDR, mapped);
++
++		if (unmapped != mapped)
++			dev_err(dev, "failed to unmap firmware\n");
++		else
++			core->fw.mapped_mem_size = 0;
++	}
++
++	return 0;
++}
++
+ int venus_firmware_cfg(struct venus_core *core)
+ {
+ 	void __iomem *cpu_cs_base = core->cpu_cs_base;
+@@ -252,37 +289,38 @@ int venus_boot(struct venus_core *core)
+ {
+ 	struct device *dev = core->dev;
+ 	const struct venus_resources *res = core->res;
+-	const struct firmware *mdt;
+ 	const char *fwpath = NULL;
+ 	phys_addr_t mem_phys;
+-	size_t res_size;
++	size_t mem_size;
+ 	int ret;
+ 
+ 	if (!IS_ENABLED(CONFIG_QCOM_MDT_LOADER) ||
+-	    (!core->use_tz && !core->fw.dev))
+-		return driver_deferred_probe_check_state(core->dev);
++	    (core->use_tz && !qcom_pas_is_available()))
++		return -EPROBE_DEFER;
+ 
+-	ret = of_property_read_string_index(dev->of_node, "firmware-name", 0, &fwpath);
++	ret = of_property_read_string_index(dev->of_node, "firmware-name", 0,
++					    &fwpath);
+ 	if (ret)
+ 		fwpath = core->res->fwname;
+ 
+-	ret = venus_load_fw_prepare(core, fwpath, &mem_phys, &res_size, &mdt);
+-	if (ret)
+-		return ret;
++	ret = venus_load_fw(core, fwpath, &mem_phys, &mem_size);
++	if (ret) {
++		dev_err(dev, "fail to load video firmware\n");
++		return -EINVAL;
++	}
++
++	core->fw.mem_size = mem_size;
++	core->fw.mem_phys = mem_phys;
+ 
+ 	if (core->use_tz)
+-		ret = venus_load_fw(core, mdt, fwpath, mem_phys, res_size);
++		ret = venus_boot_tz(core, mem_phys, mem_size);
+ 	else
+-		ret = venus_load_fw_no_tz(core, mdt, fwpath, mem_phys, res_size);
++		ret = venus_boot_no_tz(core, mem_phys, mem_size);
+ 
+-	release_firmware(mdt);
+-
+-	if (ret) {
+-		dev_err(dev, "fail to load video firmware\n");
++	if (ret)
+ 		return ret;
+-	}
+ 
+-	if (core->use_tz && res->cp_size) {
++	if ((core->use_tz == VENUS_TZ_QTEE) && res->cp_size) {
+ 		/*
+ 		 * Clues for porting using downstream data:
+ 		 * cp_start = 0
+@@ -298,31 +336,22 @@ int venus_boot(struct venus_core *core)
+ 						     res->cp_nonpixel_start,
+ 						     res->cp_nonpixel_size);
+ 		if (ret) {
+-			venus_shutdown(core);
+-			dev_err(dev, "set virtual address ranges fail (%d)\n",	ret);
++			qcom_pas_shutdown(VENUS_PAS_ID);
++			dev_err(dev, "set virtual address ranges fail (%d)\n",
++				ret);
+ 			return ret;
+ 		}
+ 	}
+ 
+-	return ret;
++	return 0;
+ }
+ 
+ int venus_shutdown(struct venus_core *core)
+ {
+-	int ret;
+-
+-	if (core->use_tz) {
+-		ret = qcom_pas_shutdown(VENUS_PAS_ID);
+-		if (core->fw.iommu_domain && core->fw.mapped_mem_size) {
+-			iommu_unmap(core->fw.iommu_domain, 0, core->fw.mapped_mem_size);
+-			core->fw.mapped_mem_size = 0;
+-		}
+-		core->fw.ctx = NULL;
+-	} else {
+-		ret = venus_shutdown_no_tz(core);
+-	}
++	if (core->use_tz)
++		return venus_shutdown_tee(core);
+ 
+-	return ret;
++	return venus_shutdown_no_tz(core);
+ }
+ 
+ int venus_firmware_check(struct venus_core *core)
+@@ -345,94 +374,6 @@ int venus_firmware_check(struct venus_core *core)
+ 	return -EINVAL;
+ }
+ 
+-static struct device *venus_firmware_alloc_platform_dev(struct venus_core *core,
+-							const char *name, const u32 *f_id)
+-{
+-	struct platform_device *pdev;
+-	int ret;
+-
+-	pdev = platform_device_alloc(name, 0);
+-	if (!pdev) {
+-		dev_err(core->dev, "%s: platform_device_alloc err\n", __func__);
+-		return ERR_PTR(-ENOMEM);
+-	}
+-
+-	pdev->dev.parent = core->dev;
+-
+-	ret = platform_device_add(pdev);
+-	if (ret) {
+-		dev_err(core->dev, "%s: platform_device_add err(%d)\n", __func__, ret);
+-		platform_device_put(pdev);
+-		return ERR_PTR(ret);
+-	}
+-
+-	ret = of_dma_configure_id(&pdev->dev, core->dev->of_node, true, f_id);
+-	if (ret) {
+-		dev_err(core->dev, "%s: of_dma_configure_id err(%d)\n", __func__, ret);
+-		platform_device_unregister(to_platform_device(&pdev->dev));
+-		return ERR_PTR(ret);
+-	}
+-
+-	return &pdev->dev;
+-}
+-
+-static int venus_firmware_setup_iommu_dev(struct venus_core *core)
+-{
+-	const u32 f_id = VENUS_FIRMWARE;
+-	struct device *dev;
+-	int ret = 0;
+-
+-	dev = venus_firmware_alloc_platform_dev(core, "video_firmware", &f_id);
+-	if (IS_ERR(dev)) {
+-		dev_err(core->dev, "%s: err\n", __func__);
+-		return PTR_ERR(dev);
+-	}
+-
+-	if (!device_iommu_mapped(dev)) {
+-		device_unregister(dev);
+-		return -ENODEV;
+-	}
+-
+-	ret = dma_set_mask_and_coherent(dev, core->res->dma_mask);
+-	if (ret) {
+-		device_unregister(dev);
+-		return ret;
+-	}
+-
+-	core->fw.dev = dev;
+-	core->fw.iommu_domain = iommu_get_domain_for_dev(core->fw.dev);
+-	core->fw.iommu_domain_owned = false;
+-
+-	return 0;
+-}
+-
+-static int venus_firmware_init_auto_detect(struct venus_core *core)
+-{
+-	int ret;
+-
+-	core->use_tz = false;
+-	if (qcom_pas_is_available()) {
+-		if (qcom_pas_supported(VENUS_PAS_ID))
+-			core->use_tz = true;
+-	} else {
+-		ret = driver_deferred_probe_check_state(core->dev);
+-		if (ret == -EPROBE_DEFER)
+-			return ret;
+-	}
+-
+-	/*
+-	 * 1. use_tz is false: No authentication is performed.
+-	 * 2. use_tz is true: TZ perform authentication.
+-	 *    a. device_iommu_mapped true: Linux config smmu
+-	 *    b. device_iommu_mapped false: TZ config smmu
+-	 */
+-	ret = venus_firmware_setup_iommu_dev(core);
+-	if (ret == -ENODEV && core->use_tz)
+-		ret = 0;
+-
+-	return ret;
+-}
+-
+ int venus_firmware_init(struct venus_core *core)
+ {
+ 	struct platform_device_info info;
+@@ -443,8 +384,15 @@ int venus_firmware_init(struct venus_core *core)
+ 
+ 	np = of_get_child_by_name(core->dev->of_node, "video-firmware");
+ 	if (!np) {
+-		ret = venus_firmware_init_auto_detect(core);
+-		return ret;
++		np = of_find_node_by_path("/firmware/optee");
++		if (np && of_device_is_available(np))
++			core->use_tz = VENUS_TZ_OPTEE;
++		else
++			core->use_tz = VENUS_TZ_QTEE;
++		of_node_put(np);
++
++		if (core->use_tz == VENUS_TZ_QTEE)
++			return 0;
+ 	}
+ 
+ 	memset(&info, 0, sizeof(info));
+@@ -483,7 +431,6 @@ int venus_firmware_init(struct venus_core *core)
+ 	}
+ 
+ 	core->fw.iommu_domain = iommu_dom;
+-	core->fw.iommu_domain_owned = true;
+ 
+ 	of_node_put(np);
+ 
+@@ -492,7 +439,6 @@ int venus_firmware_init(struct venus_core *core)
+ err_iommu_free:
+ 	iommu_domain_free(iommu_dom);
+ err_unregister:
+-	core->fw.dev = NULL;
+ 	platform_device_unregister(pdev);
+ 	of_node_put(np);
+ 	return ret;
+@@ -505,17 +451,14 @@ void venus_firmware_deinit(struct venus_core *core)
+ 	if (!core->fw.dev)
+ 		return;
+ 
+-	if (!core->use_tz && core->fw.iommu_domain_owned) {
+-		iommu = core->fw.iommu_domain;
++	iommu = core->fw.iommu_domain;
+ 
+-		if (iommu) {
+-			iommu_detach_device(iommu, core->fw.dev);
+-			iommu_domain_free(iommu);
+-		}
++	iommu_detach_device(iommu, core->fw.dev);
++
++	if (core->fw.iommu_domain) {
++		iommu_domain_free(iommu);
++		core->fw.iommu_domain = NULL;
+ 	}
++
+ 	platform_device_unregister(to_platform_device(core->fw.dev));
+-	core->fw.dev = NULL;
+-	core->fw.ctx = NULL;
+-	core->fw.iommu_domain = NULL;
+-	core->fw.iommu_domain_owned = false;
+ }

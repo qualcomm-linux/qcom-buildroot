@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# S40qrtr - start the Qualcomm IPC Router name service (qrtr-ns).
+#
+# This buildroot image uses busybox init, so the systemd unit shipped by the
+# qrtr package is never executed. qrtr-ns is the QMI service registry; the DSP
+# subsystems register their protection-domain "servreg" service over QMI/QRTR,
+# and without a running name service that never completes -- the DSP rootPD
+# stays half-up and FastRPC stalls with a GLINK intent timeout.
+#
+# Started before S60fastrpc so the service registry is up before the DSP
+# daemons attach.
+#
+
+QRTR_NS=$(command -v qrtr-ns 2>/dev/null)
+
+case "$1" in
+    start)
+        if [ -n "$QRTR_NS" ]; then
+            echo "Starting qrtr-ns..."
+            "$QRTR_NS" -f &
+        else
+            echo "qrtr-ns not installed, skipping"
+        fi
+        ;;
+    stop)
+        kill $(pidof qrtr-ns) 2>/dev/null
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

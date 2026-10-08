@@ -1,0 +1,25 @@
+From: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+Subject: [PATCH] arm64: dts: qcom: qcs6490-rb3gen2: keep rmtfs_mem
+
+The RB3Gen2 board DTS deletes rmtfs_mem (rmtfs@9c900000, from kodiak.dtsi)
+along with the other reserved-memory nodes it relocates, but never re-adds
+it. Without the reserved region the qcom_rmtfs_mem driver creates no
+/dev/qcom_rmtfs_mem* nodes, so rmtfs fails ("failed to open
+/dev/qcom_rmtfs_mem1") and the ADSP protection domains never finish coming
+up (ADSP FastRPC glink intent timeout). The 0x9c900000/0x280000 slot is
+free in the board map and abuts adsp-rpc-remote-heap@9cb80000, so keep the
+node by dropping its delete.
+
+Signed-off-by: Jorge Ramirez-Ortiz <jorge.ramirez@oss.qualcomm.com>
+diff --git a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
+index 7591cb1ef..eb1aa1a2f 100644
+--- a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
++++ b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
+@@ -22,7 +22,6 @@
+ #include "qcs6490-audioreach.dtsi"
+ 
+ /delete-node/ &ipa_fw_mem;
+-/delete-node/ &rmtfs_mem;
+ /delete-node/ &adsp_mem;
+ /delete-node/ &cdsp_mem;
+ /delete-node/ &video_mem;

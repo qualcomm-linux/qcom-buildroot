@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# S41tqftpserv - TFTP-over-QRTR file server for the DSP subsystems.
+#
+# The DSP firmware reads files (FastRPC runtime / configs) from the apps root
+# filesystem over QRTR via tqftpserv. Started after S40qrtr (needs qrtr-ns) and
+# before S60fastrpc so the server is up before the DSP requests its runtime.
+#
+
+TQFTPSERV=$(command -v tqftpserv 2>/dev/null)
+
+case "$1" in
+    start)
+        if [ -n "$TQFTPSERV" ]; then
+            echo "Starting tqftpserv..."
+            "$TQFTPSERV" &
+        else
+            echo "tqftpserv not installed, skipping"
+        fi
+        ;;
+    stop)
+        kill $(pidof tqftpserv) 2>/dev/null
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

@@ -10,6 +10,9 @@ pi3.cfg
 /lemans/blobs/
 /lemans/overlay/lib/
 /lemans/overlay/usr/
+/kodiak/blobs/
+/kodiak/overlay/lib/
+/kodiak/overlay/usr/
 # Build/flash outputs (bootimage/efi/flash-* + flash-lava packaging) — all
 # generated; keep only the checked-in helpers.
 /lemans/output/*
