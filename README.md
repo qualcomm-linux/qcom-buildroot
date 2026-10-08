@@ -52,7 +52,9 @@ See `{platform}/input/README.md` for the full file-by-file breakdown.
 ## Documentation
 
 HTML documentation for each platform is in `docs/`. Open `docs/index.html` as the
-landing page (overview, quick start, and the Lemans build/flash/boot deep dive).
+landing page: a board portal that links to each platform's self-contained deck
+(`docs/lemans/` and `docs/kodiak/`), covering overview, quick start, and the
+build/flash/boot deep dive per board.
 
 ## Further reading
 

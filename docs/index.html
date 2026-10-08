@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OP-TEE on Qualcomm Platforms — Open Boot Firmware</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent:   #2980b9;
+    --ink:      #404040;
+    --muted:    #6b6b6b;
+    --border:   #e1e4e5;
+    --card-bg:  #ffffff;
+    --page-bg:  #f5f6f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page-bg); color: var(--ink);
+    font-family: 'Lato', -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 2.5rem 1.25rem 3.5rem; }
+  header.site { text-align: center; margin-bottom: 2.5rem; }
+  header.site h1 { font-size: clamp(26px, 4vw, 40px); margin: 0 0 .4rem; }
+  header.site p { color: var(--muted); max-width: 640px; margin: 0 auto; font-size: 1.02rem; }
+
+  /* One card per board. To add a board, copy a single <article class="board"> block. */
+  .boards { display: grid; gap: 1.75rem; margin-top: 2.25rem; }
+  @media (min-width: 760px) { .boards { grid-template-columns: 1fr 1fr; } }
+
+  .board {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); transition: box-shadow .15s, transform .15s;
+  }
+  .board:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); transform: translateY(-2px); }
+  .board .banner { position: relative; aspect-ratio: 16 / 7; background: #222; }
+  .board .banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .board .banner .overlay {
+    position: absolute; left: 5%; bottom: 10%; color: #fff; font-weight: 700;
+    font-size: clamp(18px, 2.4vw, 26px); line-height: 1.15;
+    text-shadow: 0 2px 10px rgba(0,0,0,.65);
+  }
+  .board .banner .overlay .sub { display: block; font-weight: 400; font-size: .55em; margin-top: .2em; }
+  .board .body { padding: 1.25rem 1.4rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
+  .board h2 { margin: 0 0 .15rem; font-size: 1.35rem; }
+  .board .ids { color: var(--muted); font-size: .9rem; margin-bottom: .75rem; }
+  .board p.desc { margin: 0 0 1.25rem; flex: 1; }
+  .board .cta {
+    align-self: flex-start; display: inline-block; background: var(--accent); color: #fff;
+    text-decoration: none; font-weight: 700; padding: .55rem 1.1rem; border-radius: 6px;
+    font-size: .95rem;
+  }
+  .board .cta:hover { background: #216a9c; }
+
+  footer.site { text-align: center; margin-top: 3rem; color: var(--muted); font-size: .9rem; }
+  footer.site img { height: 24px; width: auto; margin-top: 12px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site">
+    <h1>Open Boot Firmware on Qualcomm Platforms</h1>
+    <p>
+      A build system for OP-TEE on Qualcomm hardware — enabling TrustZone open
+      firmware development with the same tooling and workflows used across the
+      OP-TEE ecosystem. Pick a board to dive in.
+    </p>
+  </header>
+
+  <section class="boards">
+
+    <!-- Board: Lemans ===================================================== -->
+    <article class="board">
+      <a class="banner" href="lemans/index.html">
+        <img src="img/iq-9075-evk-banner.jpg"
+             alt="Qualcomm IQ-9075 Evaluation Kit (EVK)">
+        <span class="overlay">Lemans
+          <span class="sub">IQ-9075 EVK — SA8775P / QCS9075</span></span>
+      </a>
+      <div class="body">
+        <h2>Lemans</h2>
+        <div class="ids">SoC SA8775P / QCS9075 &middot; Qualcomm IQ-9075 EVK</div>
+        <p class="desc">
+          OP-TEE on the Qualcomm IQ-9075 Evaluation Kit: build, flash and boot
+          chain, LAVA remote flashing, and a slide-by-slide deep dive of the
+          build system.
+        </p>
+        <a class="cta" href="lemans/index.html">Open Lemans docs →</a>
+      </div>
+    </article>
+
+    <!-- Board: Kodiak ===================================================== -->
+    <article class="board">
+      <a class="banner" href="kodiak/index.html">
+        <img src="img/rb3gen2-banner.jpg"
+             alt="Qualcomm RB3 Gen2 Development Kit (QCM6490 / QCS6490)">
+        <span class="overlay">Kodiak
+          <span class="sub">RB3 Gen2 — QCM6490 / QCS6490</span></span>
+      </a>
+      <div class="body">
+        <h2>Kodiak</h2>
+        <div class="ids">SoC QCM6490 / QCS6490 &middot; Qualcomm RB3 Gen2</div>
+        <p class="desc">
+          OP-TEE on the Qualcomm RB3 Gen2: the firmware replacement, quick-start
+          repo/sync/build/flash, and a slide-by-slide deep dive of the Kodiak
+          build system.
+        </p>
+        <a class="cta" href="kodiak/index.html">Open Kodiak docs →</a>
+      </div>
+    </article>
+
+  </section>
+
+  <footer class="site">
+    <strong>Open Source Technical Team</strong><br>
+    <img src="img/qualcomm-logo.svg" alt="Qualcomm">
+  </footer>
+
+</div>
+</body>
+</html>
