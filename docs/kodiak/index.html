@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OP-TEE on Qualcomm Kodiak (QCM6490 / RB3 Gen2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_rtd.css">
+</head>
+<body class="rtd" data-page="index">
+<main class="rtd-doc">
+
+  <a href="https://www.qualcomm.com/developer/hardware/rb3-gen-2-development-kit" style="text-decoration:none;">
+    <div style="position:relative; max-width:960px; margin:14px 0 22px;">
+      <img src="img/rb3gen2-banner.jpg"
+           alt="Qualcomm RB3 Gen2 Development Kit (QCM6490 / QCS6490)"
+           style="width:100%; height:auto; display:block; border-radius:8px;">
+      <span style="position:absolute; left:3%; top:50%; transform:translateY(-50%);
+                   color:#fff; font-weight:700; line-height:1.15;
+                   font-size:clamp(20px, 3.2vw, 40px);
+                   text-shadow:0 2px 10px rgba(0,0,0,.6);">Open Boot Firmware<br>
+        <span style="font-weight:400; font-size:.5em; line-height:1.2;">RB3 Gen2 Development Kit — QCM6490 / QCS6490</span></span>
+    </div>
+  </a>
+
+  <h1 id="top">OP-TEE on Qualcomm Kodiak</h1>
+  <p>
+    A build system for OP-TEE on the Qualcomm
+    <strong><a href="https://www.qualcomm.com/developer/hardware/rb3-gen-2-development-kit">RB3 Gen2</a></strong>
+    (QCM6490 / QCS6490) to enable TZ open firmware development.
+  </p>
+
+  <div class="rtd-note">
+    <strong>Note:</strong> This is an active development build system; interfaces,
+    manifest revisions, and flash procedures may change.
+    When this documentation and <code>kodiak.mk</code> disagree, trust the makefile.
+  </div>
+
+  <h2 id="contents">Contents</h2>
+  <ul class="rtd-toctree">
+    <li><a href="why.html">Why this Build System?<span class="sub">Speed · no Yocto · centralized manifest</span></a></li>
+    <li><a href="firmware-replacement.html">The Firmware Replacement<span class="sub">What TF-A · OP-TEE · KVM · U-Boot replace</span></a></li>
+    <li><a href="quick-start.html">Quick Start<span class="sub">repo init · sync · build · flash</span></a></li>
+    <li><a href="kodiak.html">Kodiak — Deep Dive<span class="sub">the build system, slide by slide</span></a></li>
+  </ul>
+
+  <footer style="text-align:center; margin-top:2.5rem;">
+    <strong>Open Source Technical Team</strong><br>
+    <img src="img/qualcomm-logo.svg" alt="Qualcomm"
+         style="height:24px; width:auto; margin-top:12px; display:inline-block;">
+  </footer>
+
+</main>
+<script src="_rtd.js"></script>
+</body>
+</html>

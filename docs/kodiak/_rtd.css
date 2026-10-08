@@ -1,0 +1,137 @@
+/* OP-TEE ReadTheDocs-style theme (sphinx_rtd_theme look). Shared by build/docs/. */
+:root {
+  --rtd-side-bg:     #343131;
+  --rtd-side-head:   #2980b9;
+  --rtd-side-text:   #d9d9d9;
+  --rtd-side-muted:  #b3b3b3;
+  --rtd-accent:      #2980b9;
+  --rtd-text:        #404040;
+  --rtd-content-bg:  #ffffff;
+  --rtd-border:      #e1e4e5;
+  --rtd-note-bg:     #e7f2fa;
+  --rtd-warn-bg:     #ffedcc;
+  --rtd-side-w:      300px;
+}
+* , *::before, *::after { box-sizing: border-box; }
+body.rtd {
+  margin: 0; background: var(--rtd-content-bg); color: var(--rtd-text);
+  font-family: Lato, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 16px; line-height: 1.65;
+  padding-left: var(--rtd-side-w);
+  /* Baked-in 1.5x enlargement (Chrome/Firefox `zoom`) so the docs read at a
+     comfortable size without manually setting the browser to 150%. */
+  zoom: 1.5;
+}
+/* Present mode: enlarge slides to 200% so the deck reads from across a room
+   (the fixed inset:0 sections stay full-viewport; content scales up). */
+body.rtd.presenting { zoom: 2; }
+
+/* Qualcomm logo (emblem + wordmark), fixed top-right on every page
+   (injected by _rtd.js). */
+.rtd-logo { position: fixed; top: 14px; right: 24px; z-index: 60;
+  display: flex; align-items: center; gap: 9px; line-height: 0; }
+.rtd-logo .mark { height: 56px; width: auto; display: block; }
+.rtd-logo .word { height: 26px; width: auto; display: block; }
+/* Keep it on the slides in present mode too — present mode is zoomed 2x, so
+   pin it to the real viewport corner and hold a slide-appropriate size. */
+body.rtd.presenting .rtd-logo { top: 22px; right: 30px; z-index: 100; gap: 7px; }
+body.rtd.presenting .rtd-logo .mark { height: 38px; }
+body.rtd.presenting .rtd-logo .word { height: 18px; }
+@media (max-width: 900px) { body.rtd:not(.presenting) .rtd-logo { display: none; } }
+/* Sidebar */
+.rtd-side {
+  position: fixed; top: 0; left: 0; width: var(--rtd-side-w); height: 100vh;
+  background: var(--rtd-side-bg); color: var(--rtd-side-text);
+  overflow-y: auto; font-size: 0.9rem;
+}
+.rtd-side .rtd-side-head {
+  background: var(--rtd-side-head); color: #fff; padding: 1rem 1.25rem;
+}
+.rtd-side .rtd-side-head a { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.1rem; }
+.rtd-side .rtd-side-head .sub { display: block; color: #cfe6f7; font-size: 0.72rem; margin-top: 0.2rem; font-weight: 400; }
+.rtd-side ul { list-style: none; margin: 0; padding: 0.5rem 0; }
+.rtd-side li a {
+  display: block; padding: 0.4rem 1.25rem; color: var(--rtd-side-text);
+  text-decoration: none; border-left: 3px solid transparent;
+}
+.rtd-side li a:hover { background: #4e4a4a; color: #fff; }
+.rtd-side li a .sub { display: block; color: var(--rtd-side-muted); font-size: 0.7rem; }
+.rtd-side li.current > a {
+  background: var(--rtd-content-bg); color: var(--rtd-text);
+  border-left-color: var(--rtd-side-head); font-weight: 700;
+}
+.rtd-side li.current > a .sub { color: #666; }
+.rtd-side .rtd-subnav { padding: 0 0 0.5rem; }
+.rtd-side .rtd-subnav a { padding-left: 2.25rem; font-size: 0.82rem; }
+/* Content */
+main.rtd-doc { max-width: 1180px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
+.rtd-breadcrumb { font-size: 0.85rem; color: #999; padding-bottom: 0.75rem; border-bottom: 1px solid var(--rtd-border); margin-bottom: 1.5rem; }
+.rtd-breadcrumb a { color: var(--rtd-accent); text-decoration: none; }
+.rtd-breadcrumb .sep { margin: 0 0.4rem; color: #ccc; }
+main.rtd-doc h1, main.rtd-doc h2, main.rtd-doc h3 { color: #2c3e50; font-weight: 700; line-height: 1.25; margin: 1.6em 0 0.6em; }
+main.rtd-doc h1 { font-size: 1.9rem; margin-top: 0; }
+main.rtd-doc h2 { font-size: 1.45rem; border-bottom: 1px solid var(--rtd-border); padding-bottom: 0.2em; }
+main.rtd-doc a { color: var(--rtd-accent); text-decoration: none; }
+main.rtd-doc a:hover { text-decoration: underline; }
+main.rtd-doc code, main.rtd-doc pre { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
+main.rtd-doc code { background: #f8f8f8; border: 1px solid var(--rtd-border); border-radius: 3px; padding: 0.1em 0.35em; font-size: 0.85em; color: #e74c3c; }
+main.rtd-doc pre { background: #f8f8f8; border: 1px solid var(--rtd-border); border-radius: 4px; padding: 0.9rem 1rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+main.rtd-doc pre code { background: none; border: none; padding: 0; color: inherit; }
+.rtd-anchor { visibility: hidden; margin-left: 0.35rem; color: var(--rtd-accent); text-decoration: none; font-weight: 400; }
+h1:hover .rtd-anchor, h2:hover .rtd-anchor, h3:hover .rtd-anchor { visibility: visible; }
+.rtd-note, .rtd-warn { border-radius: 4px; padding: 0.8rem 1rem; margin: 1.2rem 0; font-size: 0.92rem; }
+.rtd-note { background: var(--rtd-note-bg); border-left: 4px solid var(--rtd-accent); }
+.rtd-warn { background: var(--rtd-warn-bg); border-left: 4px solid #f0b37e; }
+.rtd-warn { background: var(--rtd-warn-bg); border-left: 4px solid #f0b37e; }
+.rtd-prevnext { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rtd-border); font-size: 0.9rem; }
+.rtd-prevnext a { color: var(--rtd-accent); text-decoration: none; }
+.rtd-prevnext .spacer { flex: 1; }
+/* Present toggle button (deck pages only; hidden unless body has data-deck) */
+.rtd-present-btn { display: none; }
+body.rtd[data-deck] .rtd-present-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; position: fixed;
+  bottom: 1.25rem; right: 1.25rem; z-index: 50; background: var(--rtd-accent);
+  color: #fff; border: none; border-radius: 4px; padding: 0.55rem 0.9rem;
+  font: inherit; font-size: 0.85rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+/* Responsive: collapse sidebar */
+@media (max-width: 900px) {
+  body.rtd { padding-left: 0; }
+  .rtd-side { position: static; width: 100%; height: auto; }
+  main.rtd-doc { padding-top: 1rem; }
+}
+.rtd-toctree { list-style: none; padding: 0; }
+.rtd-toctree li { border: 1px solid var(--rtd-border); border-radius: 4px; margin: 0.5rem 0; }
+.rtd-toctree li a { display: block; padding: 0.8rem 1rem; color: var(--rtd-accent); font-weight: 700; }
+.rtd-toctree li a .sub { display: block; color: #777; font-weight: 400; font-size: 0.85rem; margin-top: 0.15rem; }
+.rtd-toctree li:hover { border-color: var(--rtd-accent); }
+/* ---- Present mode: restore fullscreen one-slide-at-a-time deck ---- */
+body.rtd.presenting { padding-left: 0; overflow: hidden; }
+body.rtd.presenting .rtd-side,
+body.rtd.presenting .rtd-breadcrumb,
+body.rtd.presenting .rtd-prevnext,
+body.rtd.presenting .rtd-anchor { display: none; }
+body.rtd.presenting main.rtd-doc { max-width: none; margin: 0; padding: 0; }
+body.rtd.presenting #deck section {
+  position: fixed; inset: 0; display: none;
+  padding: 4vh 8vw; overflow: auto; background: #ffffff; color: var(--rtd-text, #404040);
+}
+/* Center the active slide in the viewport (both axes) instead of top-left
+   block flow — restores the deck's designed layout in present mode. */
+body.rtd.presenting #deck section.active {
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+}
+body.rtd.presenting #progress,
+body.rtd.presenting #counter,
+body.rtd.presenting #btn-prev,
+body.rtd.presenting #btn-next { display: initial; }
+/* In scroll mode the original slide chrome is hidden; sections flow normally */
+body.rtd:not(.presenting) #deck section {
+  position: static; display: block; min-height: 0; margin: 0 0 2.5rem; padding: 0;
+}
+body.rtd:not(.presenting) #progress,
+body.rtd:not(.presenting) #counter,
+body.rtd:not(.presenting) #btn-prev,
+body.rtd:not(.presenting) #btn-next { display: none; }
+body.rtd:not(.presenting) #deck section.active { display: block; }

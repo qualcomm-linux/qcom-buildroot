@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Firmware Replacement — OP-TEE on Qualcomm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --card-bg:  #f6f8fa;
+    --border:   #e1e4e5;
+    --text:     #404040;
+    --muted:    #6a737d;
+    --accent:   #2980b9;
+    --green:    #22863a;
+    --yellow:   #b08800;
+    --red:      #cb2431;
+  }
+  a.back {
+    align-self: flex-start;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color .15s;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-align: center;
+  }
+  h1 {
+    font-size: clamp(24px, 3.5vw, 42px);
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .subtitle {
+    font-size: 1rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 660px;
+    line-height: 1.7;
+  }
+
+  /* Replacement table */
+  .repl-wrap { width: 100%; max-width: 960px; overflow-x: auto; }
+  table.repl {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+  }
+  table.repl th, table.repl td {
+    border: 1px solid var(--border);
+    padding: 9px 14px;
+    text-align: left;
+    vertical-align: middle;
+  }
+  table.repl thead th {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  table.repl tbody tr:nth-child(odd) { background: var(--card-bg); }
+  table.repl tbody tr:nth-child(even) { background: #fff; }
+  table.repl td { color: var(--muted); }
+  table.repl td.stock { color: var(--text); }
+  table.repl td.open { color: var(--accent); font-weight: 700; }
+  table.repl td.el { font-size: 13px; white-space: nowrap; }
+  .keep { color: var(--green); font-weight: 700; }
+  code {
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    font-size: .9em;
+    color: var(--accent);
+  }
+
+  .chain {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    justify-content: center;
+    max-width: 960px;
+    width: 100%;
+  }
+  .chain-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 18px;
+    text-align: center;
+  }
+  .chain-box.grn { border-color: var(--green); background: #e6f4ea; }
+  .chain-box.hl  { border-color: var(--accent); background: #e7f2fa; }
+  .chain-box .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .chain-box.grn .label { color: var(--green); }
+  .chain-box .sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .arrow {
+    font-size: 18px;
+    color: var(--muted);
+    padding: 0 8px;
+  }
+
+  .note {
+    max-width: 720px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  /* Vertical rhythm between the blocks */
+  main.rtd-doc .subtitle  { margin: 0.75rem auto 0; }
+  main.rtd-doc .repl-wrap { margin: 2rem auto 2.5rem; }
+  main.rtd-doc .chain     { margin: 0 auto 1.5rem; }
+  main.rtd-doc .note      { margin: 0 auto; }
+</style>
+<link rel="stylesheet" href="_rtd.css">
+</head>
+<body class="rtd" data-page="firmware-replacement">
+<main class="rtd-doc">
+
+  <a class="back" href="index.html">← Back</a>
+
+  <div class="eyebrow">OP-TEE · Qualcomm Platforms</div>
+  <h1 id="firmware-replacement">The Firmware Replacement</h1>
+  <p class="subtitle">
+    <strong>PBL</strong> and <strong>XBL</strong> stay proprietary — they still load and
+    authenticate the next stage. Everything after them is replaced with open firmware:
+    <strong>TF-A</strong>, <strong>OP-TEE</strong>, <strong>KVM</strong>, and
+    <strong>U-Boot / UEFI</strong>.
+  </p>
+
+  <div class="repl-wrap">
+    <table class="repl">
+      <thead>
+        <tr>
+          <th>Stock (proprietary)</th>
+          <th>EL / world</th>
+          <th>Open replacement</th>
+          <th>EL / world</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="stock">PBL (ROM)</td>
+          <td class="el">—</td>
+          <td><span class="keep">unchanged</span></td>
+          <td class="el">—</td>
+        </tr>
+        <tr>
+          <td class="stock">XBL / SBL</td>
+          <td class="el">EL3</td>
+          <td><span class="keep">unchanged</span> — loads <code>BL2</code></td>
+          <td class="el">EL3</td>
+        </tr>
+        <tr>
+          <td class="stock">—</td>
+          <td class="el">—</td>
+          <td class="open">TF-A <code>BL2</code> (loader)</td>
+          <td class="el">EL3 → loads BL31/32/33</td>
+        </tr>
+        <tr>
+          <td class="stock">TZ / QTEE monitor</td>
+          <td class="el">EL3 · secure</td>
+          <td class="open">TF-A <code>BL31</code></td>
+          <td class="el">EL3 · secure</td>
+        </tr>
+        <tr>
+          <td class="stock">QTEE secure OS + PIL</td>
+          <td class="el">S-EL1 · secure</td>
+          <td class="open">OP-TEE (<code>BL32</code>)</td>
+          <td class="el">S-EL1 · secure</td>
+        </tr>
+        <tr>
+          <td class="stock">QHEE / Gunyah</td>
+          <td class="el">EL2 · NS</td>
+          <td class="open">KVM</td>
+          <td class="el">EL2 · NS</td>
+        </tr>
+        <tr>
+          <td class="stock">downstream UEFI / ABL</td>
+          <td class="el">EL2 · NS</td>
+          <td class="open">upstream UEFI or U-Boot (<code>BL33</code>)</td>
+          <td class="el">EL2 · NS</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="chain">
+    <div class="chain-box grn"><div class="label">PBL</div><div class="sub">ROM · proprietary</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box grn"><div class="label">XBL</div><div class="sub">EL3 · proprietary</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box hl"><div class="label">BL2</div><div class="sub">TF-A loader</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box hl"><div class="label">BL31</div><div class="sub">TF-A · EL3</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box hl"><div class="label">BL32</div><div class="sub">OP-TEE · S-EL1</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box hl"><div class="label">BL33</div><div class="sub">U-Boot / UEFI · EL2</div></div>
+  </div>
+
+  <p class="note">
+    PAS / PIL — authenticating and loading the remote-processor firmware (modem, ADSP,
+    CDSP, video) — moves from QTEE into <strong>OP-TEE</strong>, not TF-A. With QHEE
+    replaced by KVM, the old HYP↔QTEE nested-SMC authentication path collapses into the
+    secure world.
+  </p>
+
+</main>
+<script src="_rtd.js"></script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why this Build System? — OP-TEE on Qualcomm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --card-bg:  #f6f8fa;
+    --border:   #e1e4e5;
+    --text:     #404040;
+    --muted:    #6a737d;
+    --accent:   #2980b9;
+    --green:    #22863a;
+    --yellow:   #b08800;
+    --red:      #cb2431;
+  }
+  a.back {
+    align-self: flex-start;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color .15s;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-align: center;
+  }
+  h1 {
+    font-size: clamp(24px, 3.5vw, 42px);
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .subtitle {
+    font-size: 1rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 620px;
+    line-height: 1.7;
+  }
+
+  .card-grid {
+    display: grid;
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 960px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+  }
+  .card h2 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 0.75rem;
+  }
+  .card ul { padding-left: 1rem; }
+  .card li {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .card li + li { margin-top: 4px; }
+  .card li span { color: var(--text); }
+  code {
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    font-size: .9em;
+    color: var(--accent);
+  }
+
+  .chain {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    justify-content: center;
+    max-width: 960px;
+    width: 100%;
+  }
+  .chain-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 18px;
+    text-align: center;
+  }
+  .chain-box.grn { border-color: var(--green); background: #e6f4ea; }
+  .chain-box.hl  { border-color: var(--accent); background: #e7f2fa; }
+  .chain-box .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+  .chain-box.hl .label { color: var(--accent); }
+  .chain-box .sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .arrow {
+    font-size: 18px;
+    color: var(--muted);
+    padding: 0 8px;
+  }
+
+  .note {
+    max-width: 680px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  /* Vertical rhythm between the flow blocks */
+  main.rtd-doc .subtitle { margin: 0.75rem auto 0; }
+  main.rtd-doc .card-grid { margin: 2rem auto 2.75rem; }
+  main.rtd-doc .chain { margin: 0 auto 2rem; }
+  main.rtd-doc .note { margin: 0 auto; }
+</style>
+<link rel="stylesheet" href="_rtd.css">
+</head>
+<body class="rtd" data-page="why">
+<main class="rtd-doc">
+
+  <a class="back" href="index.html">← Back</a>
+
+  <div class="eyebrow">OP-TEE · Qualcomm Platforms</div>
+  <h1 id="why">Why this Build System?</h1>
+  <p class="subtitle">
+    Developing TZ open firmware typically demands a full Yocto/OE BSP build and
+    manual management of eight or more source repositories. This build system
+    removes those barriers.
+  </p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h2>Speed</h2>
+      <ul>
+        <li><span>Component-level builds — rebuild only what changed</span></li>
+        <li><span><code>make fetch-blobs</code> pulls Qualcomm firmware in <strong style="color:var(--green)">minutes</strong></span></li>
+        <li><span>No Yocto recipe-parse overhead (10 000+ recipes)</span></li>
+        <li><span><code>make flash-efi</code> for kernel-only iteration — no re-flash of firmware</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>No Yocto Build Required</h2>
+      <ul>
+        <li><span>Qualcomm firmware blobs are <strong style="color:var(--green)">publicly available</strong> — no account needed</span></li>
+        <li><span><code>make fetch-blobs</code> downloads boot binaries + CDT directly from Qualcomm/CodeLinaro URLs</span></li>
+        <li><span>GPT tables and rawprogram XMLs auto-generated via <code>qcom-ptool</code></span></li>
+        <li><span>Yocto (<code>make yocto</code>) is an option for a full BSP, not a prerequisite</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Centralized Manifest</h2>
+      <ul>
+        <li><span>One manifest pins every repo to a known-good revision</span></li>
+        <li><span>Covers: <code>optee_os</code>, <code>optee_client</code>, <code>optee_test</code>, <code>linux</code>, <code>u-boot</code>, <code>arm-trusted-firmware</code>, <code>buildroot</code></span></li>
+        <li><span><code>repo sync</code> → identical source tree for every developer</span></li>
+        <li><span>The <code>kodiak.xml</code> manifest variant extends a shared <code>common.xml</code></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="chain">
+    <div class="chain-box grn"><div class="label">repo sync</div><div class="sub">minutes</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box grn"><div class="label">make fetch-blobs</div><div class="sub">minutes</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box grn"><div class="label">make all</div><div class="sub">build</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box grn"><div class="label">make flash-loader</div><div class="sub">first flash</div></div>
+    <div class="arrow">→</div>
+    <div class="chain-box hl"><div class="label">running board</div><div class="sub">&lt; 1 hour total</div></div>
+  </div>
+
+  <p class="note">
+    Compared to a full Yocto BSP workflow which takes <strong style="color:var(--red)">hours</strong>
+    and requires setting up a complex OE layer stack before a single byte can be flashed.
+  </p>
+
+</main>
+<script src="_rtd.js"></script>
+</body>
+</html>
