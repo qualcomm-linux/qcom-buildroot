@@ -64,6 +64,8 @@
     var head = el('div', 'rtd-side-head',
       '<a href="index.html">OP-TEE · RB3 Gen2<span class="sub">QCM6490 / QCS6490</span></a>');
     side.appendChild(head);
+    side.appendChild(el('div', 'rtd-side-back',
+      '<a href="../index.html">← All boards</a>'));
     var ul = el('ul');
     var curIdx = api.currentIndex(api.NAV, path);
     api.NAV.forEach(function (item, i) {

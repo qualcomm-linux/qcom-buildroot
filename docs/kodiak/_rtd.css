@@ -49,6 +49,9 @@ body.rtd.presenting .rtd-logo .word { height: 18px; }
 }
 .rtd-side .rtd-side-head a { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.1rem; }
 .rtd-side .rtd-side-head .sub { display: block; color: #cfe6f7; font-size: 0.72rem; margin-top: 0.2rem; font-weight: 400; }
+.rtd-side .rtd-side-back { padding: 0.5rem 1.25rem; border-bottom: 1px solid #4e4a4a; }
+.rtd-side .rtd-side-back a { color: var(--rtd-side-muted); text-decoration: none; font-size: 0.8rem; }
+.rtd-side .rtd-side-back a:hover { color: #fff; }
 .rtd-side ul { list-style: none; margin: 0; padding: 0.5rem 0; }
 .rtd-side li a {
   display: block; padding: 0.4rem 1.25rem; color: var(--rtd-side-text);
