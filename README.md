@@ -59,4 +59,4 @@ build/flash/boot deep dive per board.
 ## Further reading
 
 - [OP-TEE documentation](https://optee.readthedocs.io)
-- [Qualcomm Platform Docs](https://ldts.github.io/qcom-buildroot/)
+- [Qualcomm Platform Docs](https://qualcomm-linux.github.io/qcom-buildroot/)
