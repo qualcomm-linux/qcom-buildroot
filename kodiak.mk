@@ -272,6 +272,9 @@ help:
 	@echo "  flash-lava-yocto  Package the COMPLETE Yocto release (all LUNs +"
 	@echo "                 rootfs.img) for LAVA (kodiak/output/kodiak-yocto.qcomflash.tar.gz);"
 	@echo "                 the LAVA counterpart of flash-yocto (needs 'make yocto')"
+	@echo "  flash-lava-test  Flash a remote lab board via LAVA AND run the full"
+	@echo "                 test-definitions suite (boot-handoff, remoteproc-smoke,"
+	@echo "                 fastrpc, optee-xtest) against it — see kodiak/lava/README.md"
 	@echo ""
 	@echo "Firmware blob targets (alternative to 'make yocto')"
 	@echo "  fetch-blobs    Download QCM6490 firmware blobs directly — no Yocto build needed"
@@ -1252,6 +1255,59 @@ flash-lava-yocto-package:
 	@echo "        the LAVA MCP. Flash the full rawprogram*/patch* set."
 	@echo ""
 	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
+
+################################################################################
+# flash-lava-test — Flash + run the full LAVA test-definitions suite remotely.
+#
+# flash-lava only confirms the board boots to a login prompt; this target goes
+# further and runs the actual test suite (boot-handoff, remoteproc-smoke,
+# fastrpc, optee-xtest) against a real board via kodiak/lava/flash-lava-test.yaml.
+#
+# kodiak's rootfs is an initramfs baked into the UKI (efi.bin), not a flashed
+# partition — so LAVA's normal overlay injection (which only ever acts on an
+# extracted rootfs_image file) can never reach it, and lava-test-shell has
+# nowhere to unpack its overlay. The fix: the job rebuilds the UKI itself,
+# with the LAVA test overlay merged into the initramfs, inside a
+# 'deploy: to: downloads' 'postprocess: docker' step — using the exact same
+# ukify/mkfs.fat/mcopy recipe as the 'uki' target above — before the real
+# 'deploy: to: qdl' flashes the result. See kodiak/lava/README.md.
+LAVA_TEST_INGREDIENTS_DIR     = $(CURDIR)/kodiak/output/flash-lava-test-ingredients
+LAVA_TEST_INGREDIENTS_TARBALL = $(CURDIR)/kodiak/output/kodiak-ukify-ingredients.tar.gz
+FLASH_LAVA_TEST_JOB          ?= $(CURDIR)/kodiak/lava/flash-lava-test.yaml
+
+.PHONY: flash-lava-test flash-lava-test-package
+
+# Like flash-lava: package both tarballs, then upload + submit + monitor via
+# kodiak/lava/submit-test.sh (a two-artifact variant of submit.sh — this job
+# has no console to attach to, so there is no interactive mode). Run
+# flash-lava-test-package alone to only package.
+flash-lava-test: flash-lava-test-package
+	$(CURDIR)/kodiak/lava/submit-test.sh $(FLASH_LAVA_TARBALL) $(LAVA_TEST_INGREDIENTS_TARBALL) $(FLASH_LAVA_TEST_JOB)
+
+# Depends on flash-lava-package: reuses the same kodiak-flash.qcomflash.tar.gz
+# (the job's postprocess splices its rebuilt efi.bin back into a copy of it),
+# and flash-lava-package's own prerequisites guarantee LINUX_IMAGE / LINUX_DTB
+# / BR_INITRAMFS (from the 'uki' target, above) already exist.
+flash-lava-test-package: flash-lava-package
+	rm -rf $(LAVA_TEST_INGREDIENTS_DIR)
+	@mkdir -p $(LAVA_TEST_INGREDIENTS_DIR)
+	@for pair in "$(LINUX_IMAGE):vmlinuz.efi" "$(LINUX_DTB):qcs6490-rb3gen2-el2.dtb" \
+	             "$(BR_INITRAMFS):rootfs.cpio.gz" \
+	             "$(CURDIR)/kodiak/ukify/linuxaa64.efi.stub:linuxaa64.efi.stub" \
+	             "$(BOOTAA64_EFI):bootaa64.efi"; do \
+		src="$${pair%%:*}"; dst="$${pair##*:}"; \
+		if [ ! -f "$$src" ]; then echo "ERROR: $$src not found"; exit 1; fi; \
+		cp -f "$$src" "$(LAVA_TEST_INGREDIENTS_DIR)/$$dst"; \
+	done
+	tar -czf $(LAVA_TEST_INGREDIENTS_TARBALL) -C $(LAVA_TEST_INGREDIENTS_DIR) .
+	@echo ""
+	@echo "LAVA ukify-ingredients tarball assembled: $(LAVA_TEST_INGREDIENTS_TARBALL)"
+	@echo "  Contents (flat): vmlinuz.efi, qcs6490-rb3gen2-el2.dtb, rootfs.cpio.gz,"
+	@echo "                   linuxaa64.efi.stub, bootaa64.efi"
+	@echo ""
+	@echo "  Next: upload both this and $(FLASH_LAVA_TARBALL) to lab-reachable URLs"
+	@echo "        and submit kodiak/lava/flash-lava-test.yaml — e.g. via"
+	@echo "        kodiak/lava/submit-test.sh, or 'make flash-lava-test'."
 
 yocto-clean:
 	rm -rf $(META_QCOM_DIR)
