@@ -458,6 +458,10 @@
       <h3 style="font-size:13px;margin-bottom:3px">Flashing via LAVA</h3>
       <p style="font-size:11px;color:var(--muted)">Remote lab boards · flash-lava · flash-lava-yocto</p>
     </div>
+    <div class="card" onclick="goTo('s-lava-test')" style="cursor:pointer;padding:12px 14px">
+      <h3 style="font-size:13px;margin-bottom:3px">LAVA Test Suite</h3>
+      <p style="font-size:11px;color:var(--muted)">flash-lava-test · UKI rebuilt with test overlay</p>
+    </div>
 
     <div class="card" onclick="goTo('s-boot')" style="cursor:pointer;padding:12px 14px">
       <h3 style="font-size:13px;margin-bottom:3px">Boot Chain</h3>
@@ -1471,6 +1475,62 @@ pd_ignore_unused</pre>
       (the <code>C-Lava-Token</code> the <code>lava</code> MCP server uses) or <code>$LAVA_TOKEN</code>.
       The MCP handles reads + the artifact upload; on this instance its <code>submit_job</code> is
       unauthenticated, so the actual submit/monitor go through the REST API.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────
+     SLIDE 15d — LAVA TEST SUITE
+───────────────────────────────────────────────── -->
+<section id="s-lava-test" data-sec data-sec-title="LAVA Test Suite">
+  <h2>LAVA Test Suite <span style="color:var(--accent);font-weight:400;font-size:.6em">flash-lava-test — flash + run test-definitions</span></h2>
+  <p style="font-size:14px; color:var(--muted); margin-bottom:24px; max-width:760px; text-align:center">
+    <code>flash-lava</code> only confirms the board boots to a login prompt.
+    <code>make flash-lava-test</code> goes further: it flashes a board and then
+    runs the full <code>test-definitions</code> suite against it — unattended,
+    end to end.
+  </p>
+  <div class="card" style="max-width:860px; border-color:var(--accent)">
+    <h3 style="color:var(--accent)">Why not just inject a LAVA overlay?</h3>
+    <p style="font-size:13px; color:var(--muted); line-height:1.6">
+      lemans's rootfs is an <strong style="color:var(--text)">initramfs baked
+      into the UKI</strong> (<code>efi.bin</code>), not a flashed partition —
+      LAVA's normal overlay injection only ever acts on an extracted
+      <code>rootfs_image</code> file, which doesn't exist here.
+      <code>transfer_overlay</code> (the usual fallback) is also a dead end on
+      this lab: its <code>http</code>/<code>nfs</code> paths need a DHCP lease
+      the EVK's switch port never hands out, and <code>zmodem</code> needs a
+      <code>uart</code> entry the device dictionary doesn't set.
+    </p>
+  </div>
+  <div class="card" style="max-width:860px; margin-top:16px">
+    <h3>The fix — rebuild the UKI in a postprocess step</h3>
+    <p style="font-size:13px; color:var(--muted); line-height:1.6">
+      The job's first <code>deploy: to: downloads</code> action runs a
+      <code>postprocess: docker</code> step that merges LAVA's staged test
+      overlay into a copy of the initramfs, then rebuilds <code>efi.bin</code>
+      with the same <code>ukify</code>/<code>mkfs.fat</code>/<code>mcopy</code>
+      recipe as the <code>efi</code> make target, and splices it back into a
+      copy of the flash tarball. The second <code>deploy: to: qdl</code>
+      flashes <strong style="color:var(--text)">that</strong> tarball;
+      everything downstream (qdl boot, minimal boot, test definitions) is
+      unchanged from <code>flash-lava.yaml</code>.
+    </p>
+  </div>
+  <div class="card" style="max-width:860px; margin-top:16px">
+    <h3>Packaging &amp; suites</h3>
+    <p style="font-size:13px; color:var(--muted); line-height:1.6">
+      <code>make flash-lava-test</code> packages <strong style="color:var(--text)">two</strong>
+      tarballs — the normal flash tarball and a
+      <code>lemans-ukify-ingredients.tar.gz</code> (kernel, DTB,
+      <code>rootfs.cpio.gz</code>, UKI stub, UEFI fallback loader) — uploads
+      both, submits <code>flash-lava-test.yaml</code>, and monitors it via
+      <code>lemans/lava/submit-test.sh</code> (a two-artifact, non-interactive
+      variant of <code>submit.sh</code> — this job has no console to attach
+      to). Runs <code>boot-handoff</code>, <code>remoteproc-smoke</code>,
+      <code>fastrpc</code>, and <code>optee-xtest</code>. Validated on
+      hardware: <code>health: Complete</code>, 188/188 test cases pass/skip,
+      0 fail.
     </p>
   </div>
 </section>
