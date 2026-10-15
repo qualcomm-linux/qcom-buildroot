@@ -1,0 +1,144 @@
+# LAVA flash+test job: boot chain + kernel, UKI rebuilt with the LAVA test
+# overlay merged in, then the full test-definitions suite (flash-lava-test)
+#
+# Companion to `make flash-lava-test`, which packages TWO tarballs:
+#   - lemans/output/lemans-flash.qcomflash.tar.gz           (same as flash-lava)
+#   - lemans/output/lemans-ukify-ingredients.tar.gz   (vmlinuz.efi, dtb, initramfs,
+#                                                       efi stub, UEFI fallback loader)
+#
+# WHY THIS JOB REBUILDS THE UKI INSTEAD OF JUST FLASHING efi.bin:
+# lemans's rootfs is an initramfs baked into the UKI (efi.bin), not a flashed
+# partition — so LAVA's normal overlay injection (which only ever acts on an
+# extracted `rootfs_image` file) can never reach it, and lava-test-shell has
+# nowhere to unpack its overlay. `transfer_overlay` (the usual fallback for a
+# non-deployed rootfs) is also blocked on this lab: http/nfs need DUT network
+# (no DHCP lease on the lemans EVK's switch port) and zmodem needs a `uart` in
+# the device dictionary (not set for lemans-evk).
+#
+# The fix: the first `deploy: to: downloads` action's `postprocess: docker`
+# step rebuilds the UKI with the LAVA test overlay merged into a copy of the
+# initramfs (using the exact same ukify/mkfs.fat/mcopy recipe as the `efi`
+# make target), splices the new efi.bin back into a copy of the flash
+# tarball at its original path, and the second `deploy: to: qdl` flashes
+# THAT. Everything downstream (qdl boot, minimal boot, test definitions) is
+# unchanged from flash-lava.yaml. Validated on hardware: health Complete,
+# 188/188 test cases pass/skip, 0 fail.
+#
+# Submit + monitor: see README.md in this directory, or run
+# `make flash-lava-test` / `lemans/lava/submit-test.sh` directly. The four
+# <INGREDIENTS_URL>/<INGREDIENTS_TOKEN>/<FLASH_URL>/<FLASH_TOKEN> placeholders
+# below must be substituted with URLs/tokens for the two tarballs above
+# (LAVA MCP create_artifact_upload, or any lab-reachable HTTPS host) before
+# submitting.
+
+device_type: lemans-evk
+job_name: lemans-flash-lava-test
+priority: medium
+# personal: the deploy URLs carry artifact tokens inline, so keep the job private.
+visibility: personal
+timeouts:
+  job:
+    minutes: 60
+  connection:
+    minutes: 5
+context:
+  test_character_delay: 10
+actions:
+- deploy:
+    namespace: target
+    to: downloads
+    timeout:
+      minutes: 15
+    images:
+      ingredients:
+        url: <INGREDIENTS_URL>
+        headers:
+          Authorization: <INGREDIENTS_TOKEN>
+        archive: tar
+      flash:
+        url: <FLASH_URL>
+        headers:
+          Authorization: <FLASH_TOKEN>
+    postprocess:
+      docker:
+        image: ubuntu:24.04
+        steps:
+        - apt-get update -qq
+        - apt-get install -y -qq systemd-ukify mtools dosfstools binutils tar gzip cpio findutils >/dev/null 2>&1
+        - mkdir -p flashout overlaymerge
+        - tar -xzf lemans-flash.qcomflash.tar.gz -C flashout
+        - "ls overlay*.tar.gz >/dev/null 2>&1 && tar -xzf overlay*.tar.gz -C overlaymerge || true"
+        - cp ingredients/rootfs.cpio.gz combined-rootfs.cpio.gz
+        - "ls -A overlaymerge | grep -q . && (cd overlaymerge && find * | cpio -o -H newc -R +0:+0 | gzip -9 >> ../combined-rootfs.cpio.gz) || true"
+        - ukify build --linux=ingredients/vmlinuz.efi --initrd=combined-rootfs.cpio.gz --cmdline='console=ttyMSM0,115200 qcom_scm.download_mode=1 arm-smmu.disable_bypass=0 clk_ignore_unused pd_ignore_unused' --efi-arch=aa64 --stub=ingredients/linuxaa64.efi.stub --os-release=@/etc/os-release --devicetree=ingredients/lemans-evk-el2.dtb --output=uki.efi
+        - truncate -s 512M efi.bin
+        - mkfs.fat -F 32 -S 4096 efi.bin
+        - mmd -i efi.bin ::/EFI
+        - mmd -i efi.bin ::/EFI/BOOT
+        - mmd -i efi.bin ::/EFI/Linux
+        - mcopy -i efi.bin ingredients/bootaa64.efi ::/EFI/BOOT/bootaa64.efi
+        - mcopy -i efi.bin uki.efi ::/EFI/Linux/uki.efi
+        - cp efi.bin flashout/efi.bin
+        - (cd flashout && tar -czf ../lemans-flash-ukified.qcomflash.tar.gz .)
+        - ls -la lemans-flash-ukified.qcomflash.tar.gz
+- deploy:
+    namespace: target
+    to: qdl
+    qcomflash:
+      url: downloads://lemans-flash-ukified.qcomflash.tar.gz
+    timeout:
+      minutes: 25
+- boot:
+    namespace: target
+    method: qdl
+    firehose_program: prog_firehose_ddr.elf
+    rawprogram: rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml
+    patch: patch0.xml
+    storage: ufs
+    debug: true
+    ramdump: true
+    ramdump_timeout: 1800
+    timeout:
+      minutes: 15
+- boot:
+    namespace: target
+    method: minimal
+    auto_login:
+      login_prompt: 'buildroot login:'
+      username: root
+    prompts:
+    - 'root@buildroot'
+    - 'root@(.*):[/~]#'
+    - '# '
+    timeout:
+      minutes: 15
+- test:
+    namespace: target
+    timeout:
+      minutes: 30
+    definitions:
+    - name: boot-handoff
+      from: git
+      repository: https://github.com/EmbeddedAndroid/test-definitions.git
+      branch: openbootstack-tests
+      path: automated/linux/boot-handoff/boot-handoff.yaml
+    - name: remoteproc-smoke
+      from: git
+      repository: https://github.com/EmbeddedAndroid/test-definitions.git
+      branch: openbootstack-tests
+      path: automated/linux/remoteproc-smoke/remoteproc-smoke.yaml
+    - name: fastrpc
+      from: git
+      repository: https://github.com/EmbeddedAndroid/test-definitions.git
+      branch: openbootstack-tests
+      path: automated/linux/fastrpc/fastrpc.yaml
+      parameters:
+        TESTS: "adsp:adsp:0:0 cdsp:cdsp:3:0"
+    - name: optee-xtest
+      from: git
+      repository: https://github.com/EmbeddedAndroid/test-definitions.git
+      branch: openbootstack-tests
+      path: automated/linux/optee/optee-xtest.yaml
+      parameters:
+        TEST_LEVEL: "0"
+        TEST_SUITE: "regression"

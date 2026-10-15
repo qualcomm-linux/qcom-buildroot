@@ -6,15 +6,20 @@ locally attached board. The lab boards are not USB-reachable, so LAVA fetches a
 flat flash tarball over HTTP onto its worker and runs `qdl` there
 (`deploy: to: qdl` + `boot: method: qdl`, `storage: ufs`).
 
-Two jobs, mirroring the two local USB flash paths:
+Three jobs:
 
-| Job YAML | `make` target it packages | Flashes | rootfs |
-|---|---|---|---|
-| `flash-lava.yaml` | `make flash-lava` | boot chain + kernel (LUNs 0–5, rootfs stripped) | ✗ |
-| `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all 6 LUNs + patches) | ✓ |
+| Job YAML | `make` target it packages | Flashes | rootfs | Runs |
+|---|---|---|---|---|
+| `flash-lava.yaml` | `make flash-lava` | boot chain + kernel (LUNs 0–5, rootfs stripped) | ✗ | — |
+| `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all 6 LUNs + patches) | ✓ | — |
+| `flash-lava-test.yaml` | `make flash-lava-test` | boot chain + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
 
 `flash-lava` = `flash-bootimage` + `flash-uki` combined; `flash-lava-yocto` =
-the LAVA counterpart of `flash-yocto`.
+the LAVA counterpart of `flash-yocto`. `flash-lava-test` flashes the same
+boot chain + kernel as `flash-lava`, then runs the LAVA test-definitions
+suite against it remotely — see
+[Running the full test suite (flash-lava-test)](#running-the-full-test-suite-flash-lava-test)
+below.
 
 ## Quick start (automated)
 
@@ -275,10 +280,54 @@ creds (`root` / `oelinux123`, prompt `root@lemans-evk`). A **Buildroot** rootfs
 presents `buildroot login:` and may differ — adjust `auto_login` / `prompts`
 accordingly, or drop the final `boot` action for a flash-only job.
 
+## Running the full test suite (flash-lava-test)
+
+`flash-lava-test.yaml` flashes a board and then runs the complete
+test-definitions suite against it (`boot-handoff`, `remoteproc-smoke`,
+`fastrpc`, `optee-xtest`), unattended end to end.
+
+### Why ukify, not transfer_overlay
+
+lemans's rootfs is an initramfs baked directly into the UKI (`efi.bin`), not
+a flashed partition — so LAVA's normal overlay injection, which only ever
+acts on an extracted `rootfs_image` file, has nothing to inject into.
+`transfer_overlay` (the usual fallback for a non-deployed rootfs) is also a
+dead end on this lab: its `http`/`nfs` paths need the DUT to get a DHCP
+lease (the lemans EVK's switch port doesn't hand one out), and its `zmodem`
+path needs a `uart` entry in the device dictionary (not set for
+`lemans-evk`).
+
+The fix: the job's first `deploy: to: downloads` action runs a
+`postprocess: docker` step that rebuilds the UKI with the LAVA test overlay
+(which LAVA stages into the downloads dir as `overlay-*.tar.gz`) merged into
+a copy of the initramfs, using the same `ukify`/`mkfs.fat`/`mcopy` recipe as
+the `efi` make target. It splices the rebuilt `efi.bin` back into a copy of
+the flash tarball at its original path, and the second `deploy: to: qdl`
+flashes *that* tarball. Everything downstream (qdl boot, minimal boot, test
+definitions) is identical to `flash-lava.yaml`.
+
+### Packaging and submitting
+
+`make flash-lava-test` packages **two** tarballs — the normal flash tarball
+(`lemans-flash.qcomflash.tar.gz`, same as `flash-lava`) and a second
+`lemans-ukify-ingredients.tar.gz` holding the inputs the postprocess step
+needs to rebuild the UKI (`vmlinuz.efi`, the DTB, `rootfs.cpio.gz`, the UKI
+stub, and the UEFI fallback loader) — then hands both to
+`lemans/lava/submit-test.sh`, which mints an upload URL and uploads each one
+separately, substitutes all four `<FLASH_URL>`/`<FLASH_TOKEN>`/
+`<INGREDIENTS_URL>`/`<INGREDIENTS_TOKEN>` placeholders, and submits +
+monitors the job. Unlike `flash-lava`/`flash-lava-yocto`, this job has no
+interactive mode: it runs the whole flash+boot+test-suite sequence
+headlessly, so there is nothing for `connect.sh` to attach to. To only build
+the tarballs without touching the lab: `make flash-lava-test-package`.
+Override the submitted definition with `FLASH_LAVA_TEST_JOB=`.
+
 ## Validated on hardware
 
-Both definitions have been run end to end on a lab `lemans-evk` board:
+All three definitions have been run end to end on a lab `lemans-evk` board:
 
 - `flash-lava.yaml`       — flashed all 6 LUNs and booted to a login prompt.
 - `flash-lava-yocto.yaml` — `health: Complete`: flashed all 6 LUNs incl. the
   ~924 MB rootfs, booted, and auto-login succeeded.
+- `flash-lava-test.yaml`  — `health: Complete`: 188/188 test cases
+  pass/skip, 0 fail, across all four test-definitions suites.

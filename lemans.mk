@@ -284,6 +284,9 @@ help:
 	@echo "  flash-lava-yocto  Package the COMPLETE Yocto release (all 6 LUNs +"
 	@echo "                 rootfs.img) for LAVA (lemans/output/lemans-yocto.qcomflash.tar.gz);"
 	@echo "                 the LAVA counterpart of flash-yocto (needs 'make yocto')"
+	@echo "  flash-lava-test  Flash a remote lab board via LAVA AND run the full"
+	@echo "                 test-definitions suite (boot-handoff, remoteproc-smoke,"
+	@echo "                 fastrpc, optee-xtest) against it — see lemans/lava/README.md"
 	@echo ""
 	@echo "  Typical rebuild + flash:"
 	@echo "    make bootimage && make flash-bootimage     # boot chain"
@@ -1244,6 +1247,64 @@ flash-lava-yocto-package:
 	@echo "          patch0.xml patch1.xml patch2.xml patch3.xml patch4.xml patch5.xml"
 	@echo ""
 	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
+
+################################################################################
+# flash-lava-test — Flash + run the full LAVA test-definitions suite remotely.
+#
+# flash-lava only confirms the board boots to a login prompt; this target goes
+# further and runs the actual test suite (boot-handoff, remoteproc-smoke,
+# fastrpc, optee-xtest) against a real board via lemans/lava/flash-lava-test.yaml.
+#
+# lemans's rootfs is an initramfs baked into the UKI (efi.bin), not a flashed
+# partition — so LAVA's normal overlay injection (which only ever acts on an
+# extracted rootfs_image file) can never reach it, and lava-test-shell has
+# nowhere to unpack its overlay. The fix: the job rebuilds the UKI itself,
+# with the LAVA test overlay merged into the initramfs, inside a
+# 'deploy: to: downloads' 'postprocess: docker' step — using the exact same
+# ukify/mkfs.fat/mcopy recipe as the 'efi' target above — before the real
+# 'deploy: to: qdl' flashes the result. See lemans/lava/README.md.
+#
+# This target packages a second tarball alongside flash-lava's: the raw
+# ingredients ukify needs (kernel, dtb, initramfs, stub, UEFI fallback loader)
+# bundled together, so the job's postprocess step can rebuild efi.bin on the
+# LAVA worker instead of shipping a prebuilt one that can't carry the overlay.
+LAVA_TEST_INGREDIENTS_DIR     = $(CURDIR)/lemans/output/flash-lava-test-ingredients
+LAVA_TEST_INGREDIENTS_TARBALL = $(CURDIR)/lemans/output/lemans-ukify-ingredients.tar.gz
+FLASH_LAVA_TEST_JOB          ?= $(CURDIR)/lemans/lava/flash-lava-test.yaml
+
+.PHONY: flash-lava-test flash-lava-test-package
+
+# Like flash-lava: package both tarballs, then upload + submit + monitor via
+# lemans/lava/submit-test.sh (a two-artifact variant of submit.sh — this job
+# has no console to attach to, so there is no interactive mode). Run
+# flash-lava-test-package alone to only package.
+flash-lava-test: flash-lava-test-package
+	$(CURDIR)/lemans/lava/submit-test.sh $(FLASH_LAVA_TARBALL) $(LAVA_TEST_INGREDIENTS_TARBALL) $(FLASH_LAVA_TEST_JOB)
+
+# Depends on flash-lava-package: reuses the same lemans-flash.qcomflash.tar.gz
+# (the job's postprocess splices its rebuilt efi.bin back into a copy of it),
+# and flash-lava-package's own prerequisites guarantee LINUX_IMAGE / LINUX_DTB
+# / BR_INITRAMFS (from the 'efi' target, above) already exist.
+flash-lava-test-package: flash-lava-package
+	rm -rf $(LAVA_TEST_INGREDIENTS_DIR)
+	@mkdir -p $(LAVA_TEST_INGREDIENTS_DIR)
+	@for pair in "$(LINUX_IMAGE):vmlinuz.efi" "$(LINUX_DTB):lemans-evk-el2.dtb" \
+	             "$(BR_INITRAMFS):rootfs.cpio.gz" \
+	             "$(CURDIR)/lemans/ukify/linuxaa64.efi.stub:linuxaa64.efi.stub" \
+	             "$(BOOTAA64_EFI):bootaa64.efi"; do \
+		src="$${pair%%:*}"; dst="$${pair##*:}"; \
+		if [ ! -f "$$src" ]; then echo "ERROR: $$src not found"; exit 1; fi; \
+		cp -f "$$src" "$(LAVA_TEST_INGREDIENTS_DIR)/$$dst"; \
+	done
+	tar -czf $(LAVA_TEST_INGREDIENTS_TARBALL) -C $(LAVA_TEST_INGREDIENTS_DIR) .
+	@echo ""
+	@echo "LAVA ukify-ingredients tarball assembled: $(LAVA_TEST_INGREDIENTS_TARBALL)"
+	@echo "  Contents (flat): vmlinuz.efi, lemans-evk-el2.dtb, rootfs.cpio.gz,"
+	@echo "                   linuxaa64.efi.stub, bootaa64.efi"
+	@echo ""
+	@echo "  Next: upload both this and $(FLASH_LAVA_TARBALL) to lab-reachable URLs"
+	@echo "        and submit lemans/lava/flash-lava-test.yaml — e.g. via"
+	@echo "        lemans/lava/submit-test.sh, or 'make flash-lava-test'."
 
 ################################################################################
 # flash-sail — Flash the SAIL (safety-island) NOR image.
