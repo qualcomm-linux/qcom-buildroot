@@ -31,6 +31,9 @@
 #               only) and the guest in /opt/kvm-guest (kvm_guest_ext)
 #   gpu-render  egl-readback (egl_readback_ext) on Mesa freedreno with EGL,
 #               OpenGL ES and GBM
+#   video-codec ffmpeg with the V4L2 mem2mem decoders and encoders, and the
+#               reference streams with the MD5s of their software decode in
+#               /usr/share/video-codec
 #   inference   (GPU and CPU entries) tflite-run (tflite_run_ext) on
 #               TensorFlow Lite with XNNPACK and the GPU delegate, OpenCL from
 #               Mesa RustiCL, clinfo
@@ -43,7 +46,8 @@ TEST ?= y
 QCOM_TESTS_ALL = boot-fingerprint boot-handoff cpu-features cpu-hotplug \
 		 cpufreq-policy kernel-health maxcpus memtest remoteproc-smoke \
 		 remoteproc-restart fastrpc optee-xtest alsa-dsp-restart \
-		 memtester kvm-unit-tests kvm-guest gpu-render
+		 memtester kvm-unit-tests kvm-guest gpu-render \
+		 video-codec
 QCOM_TESTS ?= $(QCOM_TESTS_ALL)
 
 ifeq ($(TEST),y)
@@ -168,6 +172,74 @@ BR2_PACKAGE_CLINFO              ?= y
 BR2_PACKAGE_TENSORFLOW_LITE     ?= y
 BR2_PACKAGE_TENSORFLOW_LITE_GPU ?= y
 BR2_PACKAGE_TFLITE_RUN_EXT      ?= y
+endif
+
+################################################################################
+# Video codec userspace (video-codec)
+#
+# FFmpeg with only what the test runs: the H.264, HEVC and VP9 V4L2 mem2mem
+# decoders and the H.264 and HEVC encoders, the software decoders that
+# check a hardware encode, testsrc2 (lavfi, whose frames reach ffmpeg as
+# wrapped_avframe packets), the psnr filter, framemd5 and the raw H.264,
+# HEVC and IVF formats. The reference streams and the per-frame MD5 of
+# their software decode go to /usr/share/video-codec
+# (qcom/test/video/mk-video-streams.sh, which needs a host ffmpeg with
+# libx264, libx265 and libvpx).
+#
+# qcom/test/video/buildroot-patches/*.patch are applied in order to the
+# Buildroot tree before it builds; one that reverses cleanly is already
+# applied and is skipped.
+#   0001  FFmpeg 7.1.2 instead of 6.1.2: at the end of the input the 6.1
+#         ffmpeg tool holds every frame the decoder returns until it has
+#         drained, so a V4L2 decoder that needs a CAPTURE buffer back to
+#         finish never does (venus, H.264)
+################################################################################
+ifneq ($(call qcom-test,video-codec),)
+BR2_PACKAGE_FFMPEG           ?= y
+BR2_PACKAGE_FFMPEG_FFMPEG    ?= y
+BR2_PACKAGE_FFMPEG_SWSCALE   ?= y
+BR2_PACKAGE_FFMPEG_ENCODERS  ?= "rawvideo wrapped_avframe h264_v4l2m2m hevc_v4l2m2m"
+BR2_PACKAGE_FFMPEG_DECODERS  ?= "rawvideo wrapped_avframe h264 hevc vp9 h264_v4l2m2m hevc_v4l2m2m vp9_v4l2m2m"
+BR2_PACKAGE_FFMPEG_MUXERS    ?= "framemd5 h264 hevc null rawvideo"
+BR2_PACKAGE_FFMPEG_DEMUXERS  ?= "h264 hevc ivf rawvideo"
+BR2_PACKAGE_FFMPEG_PARSERS   ?= "h264 hevc vp9"
+BR2_PACKAGE_FFMPEG_BSFS      ?= "h264_mp4toannexb hevc_mp4toannexb vp9_superframe_split"
+BR2_PACKAGE_FFMPEG_PROTOCOLS ?= "file pipe"
+BR2_PACKAGE_FFMPEG_FILTERS   ?= "buffer buffersink format null nullsink psnr scale testsrc2"
+BR2_PACKAGE_FFMPEG_INDEVS    ?= n
+BR2_PACKAGE_FFMPEG_OUTDEVS   ?= n
+# configure fails if the V4L2 mem2mem support cannot be built, rather than
+# leaving it out; lavfi is the input device testsrc2 needs.
+BR2_PACKAGE_FFMPEG_EXTRACONF ?= "--enable-v4l2-m2m --enable-indev=lavfi"
+
+QCOM_TEST_VIDEO_STREAMS_DIR ?= $(ROOT)/out/video-streams
+BR2_ROOTFS_OVERLAY          += $(QCOM_TEST_VIDEO_STREAMS_DIR)
+
+QCOM_TEST_VIDEO_STREAMS = $(QCOM_TEST_VIDEO_STREAMS_DIR)/usr/share/video-codec
+
+.PHONY: test-video-streams test-video-streams-clean
+test-video-streams: $(QCOM_TEST_VIDEO_STREAMS)/README
+
+$(QCOM_TEST_VIDEO_STREAMS)/README: $(CURDIR)/qcom/test/video/mk-video-streams.sh
+	$< $(QCOM_TEST_VIDEO_STREAMS)
+
+test-video-streams-clean:
+	rm -rf $(QCOM_TEST_VIDEO_STREAMS_DIR)
+
+QCOM_TEST_VIDEO_BR_PATCHES = $(sort $(wildcard $(CURDIR)/qcom/test/video/buildroot-patches/*.patch))
+
+.PHONY: test-video-buildroot-patches
+test-video-buildroot-patches:
+	@for p in $(QCOM_TEST_VIDEO_BR_PATCHES); do \
+		if git -C $(ROOT)/buildroot apply -R --check $$p 2>/dev/null; then \
+			echo "buildroot: $${p##*/} already applied"; \
+		else \
+			echo "buildroot: applying $${p##*/}"; \
+			git -C $(ROOT)/buildroot apply $$p || exit 1; \
+		fi; \
+	done
+
+buildroot: test-video-streams test-video-buildroot-patches
 endif
 
 endif
