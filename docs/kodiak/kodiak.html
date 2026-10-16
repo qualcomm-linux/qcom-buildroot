@@ -1192,10 +1192,10 @@
       tarballs — the normal flash tarball and a
       <code>kodiak-ukify-ingredients.tar.gz</code> (kernel <code>Image</code>,
       DTB, <code>rootfs.cpio.gz</code>, UKI stub, UEFI fallback loader) —
-      uploads both, submits <code>flash-lava-test.yaml</code>, and monitors it
-      via <code>kodiak/lava/submit-test.sh</code> (a two-artifact,
-      non-interactive variant of <code>submit.sh</code> — this job has no
-      console to attach to). Runs <code>boot-handoff</code>,
+      uploads both, writes the job from the plan
+      <code>kodiak/lava/test-plan</code>, submits it and follows it with the
+      shared <code>qcom/lava</code> scripts (see <code>qcom/lava/README.md</code>;
+      the job is public and has no console to attach to). Runs <code>boot-handoff</code>,
       <code>remoteproc-smoke</code>, <code>fastrpc</code>, and
       <code>optee-xtest</code>. Validated on a lab
       <code>qcs6490-rb3gen2</code> board (job 489920): health

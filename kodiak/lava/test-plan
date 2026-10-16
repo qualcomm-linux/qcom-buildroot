@@ -1,0 +1,6 @@
+# Test plan of 'make flash-lava-test' (qcom/lava/flash-lava-test.py):
+# <name> <test definition in the test-definitions repository> [PARAM=value ...]
+boot-handoff     automated/linux/boot-handoff/boot-handoff.yaml
+remoteproc-smoke automated/linux/remoteproc-smoke/remoteproc-smoke.yaml
+fastrpc          automated/linux/fastrpc/fastrpc.yaml TESTS="adsp:adsp:0:0 cdsp:cdsp:3:0"
+optee-xtest      automated/linux/optee/optee-xtest.yaml TEST_LEVEL=0 TEST_SUITE=regression

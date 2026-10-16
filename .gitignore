@@ -22,6 +22,9 @@ pi3.cfg
 /kodiak/output/flash-lava/
 /kodiak/output/kodiak-flash.qcomflash.tar.gz
 /kodiak/output/kodiak-yocto.qcomflash.tar.gz
+/kodiak/output/flash-lava-test-ingredients/
+/kodiak/output/kodiak-ukify-ingredients.tar.gz
+/kodiak/output/kodiak-flash-lava-test.yaml
 /oe-core/
 /yocto/
 /bitbake/

@@ -12,7 +12,7 @@ Three jobs, mirroring the local USB flash paths:
 |---|---|---|---|---|
 | `flash-lava.yaml` | `make flash-lava` | loader + kernel (LUNs 0,1,2,4; efi partition only on LUN 0) | ✗ | — |
 | `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all LUNs + patches) | ✓ | — |
-| `flash-lava-test.yaml` | `make flash-lava-test` | loader + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
+| generated from `test-plan` | `make flash-lava-test` | loader + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
 
 `flash-lava` = `flash-bootimage` + `flash-uki` combined; `flash-lava-yocto` = the
 LAVA counterpart of `flash-yocto`. `flash-lava-test` flashes the same loader +
@@ -293,9 +293,13 @@ each YAML and pass `FLASH_LAVA_DEVICE_TYPE=<name>` to `connect.sh`.
 
 ## Running the full test suite (flash-lava-test)
 
-`flash-lava-test.yaml` flashes a board and then runs the complete
-test-definitions suite against it (`boot-handoff`, `remoteproc-smoke`,
-`fastrpc`, `optee-xtest`), unattended end to end.
+`make flash-lava-test` flashes a board and then runs the test plan
+`kodiak/lava/test-plan` against it (`boot-handoff`, `remoteproc-smoke`,
+`fastrpc`, `optee-xtest`), unattended end to end. The job, the packaging
+and the submission are shared by every board: see
+[qcom/lava/README.md](../../qcom/lava/README.md). kodiak.mk sets the board
+variables (device type, qdl files, prompts, UKI ingredients) and uses the
+`initramfs` overlay described below.
 
 ### Why ukify, not transfer_overlay
 
@@ -319,19 +323,18 @@ definitions) is identical to `flash-lava.yaml`.
 
 ### Packaging and submitting
 
-`make flash-lava-test` packages **two** tarballs — the normal flash tarball
-(`kodiak-flash.qcomflash.tar.gz`, same as `flash-lava`) and a second
-`kodiak-ukify-ingredients.tar.gz` holding the inputs the postprocess step
-needs to rebuild the UKI (`Image` staged as `vmlinuz.efi`, the DTB,
-`rootfs.cpio.gz`, the UKI stub, and the UEFI fallback loader) — then hands
-both to `kodiak/lava/submit-test.sh`, which mints an upload URL and uploads
-each one separately, substitutes all four `<FLASH_URL>`/`<FLASH_TOKEN>`/
-`<INGREDIENTS_URL>`/`<INGREDIENTS_TOKEN>` placeholders, and submits +
-monitors the job. Unlike `flash-lava`/`flash-lava-yocto`, this job has no
-interactive mode: it runs the whole flash+boot+test-suite sequence
-headlessly, so there is nothing for `connect.sh` to attach to. To only build
-the tarballs without touching the lab: `make flash-lava-test-package`.
-Override the submitted definition with `FLASH_LAVA_TEST_JOB=`.
+`make flash-lava-test` packages **two** tarballs: the normal flash tarball
+(`kodiak-flash.qcomflash.tar.gz`, same as `flash-lava`) and
+`kodiak-ukify-ingredients.tar.gz` with the inputs the postprocess step needs to
+rebuild the UKI (the kernel as `vmlinuz.efi`, the DTB, `rootfs.cpio.gz`, the
+UKI stub and the UEFI fallback loader). It writes the job to
+`kodiak/output/kodiak-flash-lava-test.yaml` and hands it with both tarballs to
+`qcom/lava/submit-test.sh`, which uploads each one, fills in their URLs and
+the names of the LAVA remote artifact tokens (so the job is public), and
+submits and follows the job. This job has no interactive mode. To only build
+the tarballs: `make flash-lava-test-package`; to only write the job: `make
+flash-lava-test-job`. `LAVA_TEST_REPO` and `LAVA_TEST_BRANCH` select the
+test-definitions repository and branch.
 
 ### fastrpc TESTS: parameter
 
