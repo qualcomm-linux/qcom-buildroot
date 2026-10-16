@@ -32,6 +32,9 @@
 #               lkvm and bash (kvm_unit_tests_ext)
 #   kvm-guest   lkvm, socat (kvmtool reads console input from a terminal
 #               only) and the guest in /opt/kvm-guest (kvm_guest_ext)
+#   qcom-tests  the interactive runner /usr/bin/qcom-tests (FastRPC calls, a
+#               V4L2 codec round trip, a CPU soak): fastrpc_test, stress-ng,
+#               v4l2-ctl and GStreamer with the V4L2 codec elements
 #   gpu-render  egl-readback (egl_readback_ext) on Mesa freedreno with EGL,
 #               OpenGL ES and GBM
 #   video-codec ffmpeg with the V4L2 mem2mem decoders and encoders, and the
@@ -52,14 +55,14 @@ QCOM_TESTS_ALL = boot-fingerprint boot-handoff cpu-features cpu-hotplug \
 		 cpufreq-policy kernel-health maxcpus memtest remoteproc-smoke \
 		 remoteproc-restart fastrpc optee-xtest alsa-dsp-restart \
 		 memtester kvm-unit-tests kvm-guest gpu-render \
-		 video-codec inference
+		 video-codec inference qcom-tests
 QCOM_TESTS ?= $(QCOM_TESTS_ALL)
 
 ifeq ($(TEST),y)
 # qcom-test <test>...: non-empty if QCOM_TESTS names any of them
 qcom-test = $(filter $(1),$(QCOM_TESTS))
 
-ifneq ($(call qcom-test,cpufreq-policy cpu-hotplug),)
+ifneq ($(call qcom-test,cpufreq-policy cpu-hotplug qcom-tests),)
 BR2_PACKAGE_STRESS_NG ?= y
 endif
 
@@ -67,7 +70,7 @@ ifneq ($(call qcom-test,cpu-features),)
 BR2_PACKAGE_IDREGS_ARM64_EXT ?= y
 endif
 
-ifneq ($(call qcom-test,fastrpc inference),)
+ifneq ($(call qcom-test,fastrpc inference qcom-tests),)
 BR2_PACKAGE_FASTRPC_EXT ?= y
 endif
 
@@ -99,6 +102,26 @@ endif
 ifneq ($(call qcom-test,kvm-guest),)
 BR2_PACKAGE_SOCAT         ?= y
 BR2_PACKAGE_KVM_GUEST_EXT ?= y
+endif
+
+# GStreamer runs the V4L2 mem2mem codec (v4l2h264enc, v4l2h264dec), fed by
+# videotestsrc and videoconvertscale on the encode side and by qtdemux
+# (isomp4) and h264parse/h265parse (videoparsers) on the decode side.
+ifneq ($(call qcom-test,qcom-tests),)
+BR2_ROOTFS_OVERLAY += $(CURDIR)/qcom/test/overlay
+BR2_INSTALL_LIBSTDCPP                                  ?= y
+BR2_PACKAGE_LIBV4L                                     ?= y
+BR2_PACKAGE_LIBV4L_UTILS                               ?= y
+BR2_PACKAGE_GSTREAMER1                                 ?= y
+BR2_PACKAGE_GST1_PLUGINS_BASE                          ?= y
+BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOTESTSRC      ?= y
+BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOCONVERTSCALE ?= y
+BR2_PACKAGE_GST1_PLUGINS_GOOD                          ?= y
+BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2              ?= y
+BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2_PROBE        ?= y
+BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_ISOMP4            ?= y
+BR2_PACKAGE_GST1_PLUGINS_BAD                           ?= y
+BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_VIDEOPARSERS       ?= y
 endif
 
 ################################################################################
