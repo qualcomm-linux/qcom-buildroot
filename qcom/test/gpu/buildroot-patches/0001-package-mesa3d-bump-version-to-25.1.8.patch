@@ -1,0 +1,402 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Thu, 1 Oct 2026 15:10:26 -0400
+Subject: [PATCH] package/mesa3d: bump version to 25.1.8
+
+Backport of the Mesa 25.1 updates in Buildroot 2025.08 to Buildroot
+2025.05: 2f7bcc7dfc52 ("package/mesa3d: bump version to 25.1.1") and
+the 25.1.3 to 25.1.8 bumps (c7f3ea0e1a6f, 5948b4dd7bd1, 15d35cfb361e,
+7bccebecc27f, 64de9e51421f, 7c820d45cdc9). The Config.in.legacy entry
+for the removed OSMesa option is left out: 2025.05 has no 2025.08
+section. RustiCL (fc7c7d74aa61, 9aff5cb69799) and the imagination
+Vulkan driver (5e818c16a31a) are not taken.
+
+Mesa 25.0 does not know the Adreno 623; 25.1 does.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ .checkpackageignore                           |  1 -
+ package/mesa3d-demos/mesa3d-demos.mk          | 11 +----
+ package/mesa3d-headers/mesa3d-headers.mk      |  2 +-
+ ...t-proper-value-for-LIBCLC_INCLUDEDIR.patch | 41 -------------------
+ ...ion-to-disable-optional-neon-suppor.patch} | 10 ++---
+ ...-Include-stddef.h-to-fix-build-erro.patch} |  0
+ ...uild.patch => 0003-Fix-uClibc-build.patch} |  0
+ package/mesa3d/Config.in                      | 24 ++++++-----
+ package/mesa3d/mesa3d.hash                    |  6 +--
+ package/mesa3d/mesa3d.mk                      | 35 ++++++++--------
+ package/wine/wine.mk                          | 10 +----
+ 11 files changed, 44 insertions(+), 96 deletions(-)
+ delete mode 100644 package/mesa3d/0001-meson-Set-proper-value-for-LIBCLC_INCLUDEDIR.patch
+ rename package/mesa3d/{0002-vc4-add-meson-option-to-disable-optional-neon-suppor.patch => 0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch} (93%)
+ rename package/mesa3d/{0003-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch => 0002-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch} (100%)
+ rename package/mesa3d/{0004-Fix-uClibc-build.patch => 0003-Fix-uClibc-build.patch} (100%)
+
+diff --git a/.checkpackageignore b/.checkpackageignore
+index 5a427fe0..7287cc60 100644
+--- a/.checkpackageignore
++++ b/.checkpackageignore
+@@ -795,7 +795,6 @@ package/memstat/0001-PATH_MAX.patch lib_patch.Upstream
+ package/mender-connect/S43mender-connect Shellcheck
+ package/menu-cache/0001-Support-gcc10-compilation.patch lib_patch.Upstream
+ package/mesa3d-demos/0001-demos-makes-opengl-an-optional-component.patch lib_patch.Upstream
+-package/mesa3d/0001-meson-Set-proper-value-for-LIBCLC_INCLUDEDIR.patch lib_patch.Upstream
+ package/meson-tools/0001-amlbootenc-gxl-remove-non-std-C-convention-in-for.patch lib_patch.Upstream
+ package/meson/0001-Prefer-ext-static-libs-when-default-library-static.patch lib_patch.Upstream
+ package/meson/0002-mesonbuild-dependencies-base.py-add-pkg_config_stati.patch lib_patch.Upstream
+diff --git a/package/mesa3d-demos/mesa3d-demos.mk b/package/mesa3d-demos/mesa3d-demos.mk
+index cc0121f6..fd4805a7 100644
+--- a/package/mesa3d-demos/mesa3d-demos.mk
++++ b/package/mesa3d-demos/mesa3d-demos.mk
+@@ -11,7 +11,8 @@ MESA3D_DEMOS_DEPENDENCIES = host-pkgconf
+ MESA3D_DEMOS_LICENSE = MIT
+ 
+ MESA3D_DEMOS_CONF_OPTS += \
+-	-Dgles1=disabled
++	-Dgles1=disabled \
++	-Dosmesa=disabled  # BR2_PACKAGE_MESA3D_OSMESA_GALLIUM removed in mesa 25.1
+ 
+ ifeq ($(BR2_PACKAGE_XORG7)$(BR2_PACKAGE_HAS_LIBGL),yy)
+ MESA3D_DEMOS_DEPENDENCIES += libgl libglew libglu xlib_libX11 xlib_libXext
+@@ -52,14 +53,6 @@ endif
+ ifeq ($(BR2_PACKAGE_LIBFREEGLUT),y)
+ MESA3D_DEMOS_DEPENDENCIES += libfreeglut
+ MESA3D_DEMOS_CONF_OPTS += -Dwith-glut=$(STAGING_DIR)/usr
+-# osmesa support depends on glut
+-ifeq ($(BR2_PACKAGE_MESA3D_OSMESA_GALLIUM),y)
+-MESA3D_DEMOS_CONF_OPTS += -Dosmesa=enabled
+-else
+-MESA3D_DEMOS_CONF_OPTS += -Dosmesa=disabled
+-endif
+-else
+-MESA3D_DEMOS_CONF_OPTS += -Dosmesa=disabled
+ endif
+ 
+ ifeq ($(BR2_PACKAGE_LIBDECOR)$(BR2_PACKAGE_WAYLAND),yy)
+diff --git a/package/mesa3d-headers/mesa3d-headers.mk b/package/mesa3d-headers/mesa3d-headers.mk
+index cabdbe65..5cd05cc9 100644
+--- a/package/mesa3d-headers/mesa3d-headers.mk
++++ b/package/mesa3d-headers/mesa3d-headers.mk
+@@ -12,7 +12,7 @@ endif
+ 
+ # Not possible to directly refer to mesa3d variables, because of
+ # first/second expansion trickery...
+-MESA3D_HEADERS_VERSION = 25.0.6
++MESA3D_HEADERS_VERSION = 25.1.8
+ MESA3D_HEADERS_SOURCE = mesa-$(MESA3D_HEADERS_VERSION).tar.xz
+ MESA3D_HEADERS_SITE = https://archive.mesa3d.org
+ MESA3D_HEADERS_DL_SUBDIR = mesa3d
+diff --git a/package/mesa3d/0001-meson-Set-proper-value-for-LIBCLC_INCLUDEDIR.patch b/package/mesa3d/0001-meson-Set-proper-value-for-LIBCLC_INCLUDEDIR.patch
+deleted file mode 100644
+index ff362551..00000000
+--- a/package/mesa3d/0001-meson-Set-proper-value-for-LIBCLC_INCLUDEDIR.patch
++++ /dev/null
+@@ -1,41 +0,0 @@
+-From 7b46756a99aca7f27a45c3b99460f088570f6f53 Mon Sep 17 00:00:00 2001
+-From: Romain Naour <romain.naour@smile.fr>
+-Date: Wed, 17 Apr 2019 23:07:42 +0200
+-Subject: [PATCH] meson: Set proper value for LIBCLC_INCLUDEDIR
+-
+-LIBCLC_INCLUDEDIR is the location where mesa3d OpenCL implementation
+-will look for OpenCL "headers" on the target, when building the OpenCL
+-kernels.
+-
+-The value returned by pkg-config for includedir is relevant when
+-cross-compiling, on the build machine. But in this specific case, we
+-really need a value that is valid on the target.
+-
+-Those headers are installed by the libclc package in /usr/share so
+-that they are not removed by Buildroot target-finalize logic.
+-
+-Based on the patch for autotools provided by Valentin Korenblit.
+-
+-Signed-off-by: Romain Naour <romain.naour@smile.fr>
+-Signed-off-by: Bernd Kuhls <bernd@kuhls.net>
+-[rebased for 20.2.0, 20.3.0 & 25.0.0]
+----
+- src/gallium/frontends/clover/meson.build | 2 +-
+- 1 file changed, 1 insertion(+), 1 deletion(-)
+-
+-diff --git a/src/gallium/frontends/clover/meson.build b/src/gallium/frontends/clover/meson.build
+-index 62ac5f5278d..ecdeb39669c 100644
+---- a/src/gallium/frontends/clover/meson.build
+-+++ b/src/gallium/frontends/clover/meson.build
+-@@ -10,7 +10,7 @@
+-   '-DCL_USE_DEPRECATED_OPENCL_2_0_APIS',
+-   '-DCL_USE_DEPRECATED_OPENCL_2_1_APIS',
+-   '-DCL_USE_DEPRECATED_OPENCL_2_2_APIS',
+--  '-DLIBCLC_INCLUDEDIR="@0@/"'.format(dep_clc.get_variable(pkgconfig : 'includedir')),
+-+  '-DLIBCLC_INCLUDEDIR="/usr/share"',
+-   '-DLIBCLC_LIBEXECDIR="@0@/"'.format(dep_clc.get_variable(pkgconfig : 'libexecdir'))
+- ]
+- clover_incs = [inc_include, inc_src, inc_gallium, inc_gallium_aux]
+--- 
+-2.20.1
+-
+diff --git a/package/mesa3d/0002-vc4-add-meson-option-to-disable-optional-neon-suppor.patch b/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+similarity index 93%
+rename from package/mesa3d/0002-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+rename to package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+index 3b9bca06..04b33a78 100644
+--- a/package/mesa3d/0002-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
++++ b/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+@@ -10,19 +10,19 @@ to force disabling it at compile time.
+ Upstream: https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/4114
+ Signed-off-by: Peter Seiderer <ps.report@gmx.net>
+ Signed-off-by: Bernd Kuhls <bernd@kuhls.net>
+-[rebased for 20.2.0, 20.3.0, 21.1.0, 23.1.0, 23.2.0 & 24.3.0]
++[rebased for 20.2.0, 20.3.0, 21.1.0, 23.1.0, 23.2.0, 24.3.0 & 25.1.0]
+ Signed-off-by: Peter Seiderer <ps.report@gmx.net>
+ [fix syntax error after previous rebases]
+ ---
+- meson_options.txt                    | 7 +++++++
++ meson.options                        | 7 +++++++
+  src/gallium/drivers/vc4/meson.build  | 4 ++--
+  src/gallium/drivers/vc4/vc4_tiling.h | 4 ++--
+  3 files changed, 11 insertions(+), 4 deletions(-)
+ 
+-diff --git a/meson_options.txt b/meson_options.txt
++diff --git a/meson.options b/meson.options
+ index 8e0bf2a..1cf0e07 100644
+---- a/meson_options.txt
+-+++ b/meson_options.txt
++--- a/meson.options
+++++ b/meson.options
+ @@ -117,6 +117,13 @@ option(
+    description : 'enable gallium va frontend.',
+  )
+diff --git a/package/mesa3d/0003-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch b/package/mesa3d/0002-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch
+similarity index 100%
+rename from package/mesa3d/0003-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch
+rename to package/mesa3d/0002-src-util-rand_xor-Include-stddef.h-to-fix-build-erro.patch
+diff --git a/package/mesa3d/0004-Fix-uClibc-build.patch b/package/mesa3d/0003-Fix-uClibc-build.patch
+similarity index 100%
+rename from package/mesa3d/0004-Fix-uClibc-build.patch
+rename to package/mesa3d/0003-Fix-uClibc-build.patch
+diff --git a/package/mesa3d/Config.in b/package/mesa3d/Config.in
+index 98c77125..f784c773 100644
+--- a/package/mesa3d/Config.in
++++ b/package/mesa3d/Config.in
+@@ -21,6 +21,12 @@ if BR2_PACKAGE_MESA3D
+ config BR2_PACKAGE_MESA3D_NEEDS_ELFUTILS
+ 	bool
+ 
++config BR2_PACKAGE_MESA3D_NEEDS_PRECOMP_COMPILER
++	bool
++	select BR2_PACKAGE_MESA3D_OPENCL
++	select BR2_PACKAGE_SPIRV_LLVM_TRANSLATOR
++	select BR2_PACKAGE_SPIRV_TOOLS
++
+ config BR2_PACKAGE_MESA3D_LLVM
+ 	bool "llvm support"
+ 	depends on BR2_PACKAGE_LLVM_ARCH_SUPPORTS
+@@ -50,6 +56,7 @@ config BR2_PACKAGE_MESA3D_OPENCL
+ 	bool "OpenCL support"
+ 	depends on BR2_PACKAGE_MESA3D_LLVM
+ 	depends on BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_R600 || \
++		BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST || \
+ 		BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_RADEONSI || \
+ 		BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_IRIS || \
+ 		BR2_PACKAGE_MESA3D_VULKAN_DRIVER_INTEL
+@@ -132,9 +139,7 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_IRIS
+ 	bool "Gallium iris driver"
+ 	depends on BR2_PACKAGE_MESA3D_LLVM
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+-	select BR2_PACKAGE_MESA3D_OPENCL
+-	select BR2_PACKAGE_SPIRV_LLVM_TRANSLATOR
+-	select BR2_PACKAGE_SPIRV_TOOLS
++	select BR2_PACKAGE_MESA3D_NEEDS_PRECOMP_COMPILER
+ 	help
+ 	  Mesa driver for iris-based Intel GPUs.
+ 
+@@ -171,10 +176,15 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_NOUVEAU
+ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST
+ 	bool "Gallium panfrost driver"
+ 	depends on BR2_TOOLCHAIN_HAS_SYNC_4 || !BR2_PACKAGE_XORG7 # libxshmfence
++	depends on BR2_PACKAGE_MESA3D_LLVM
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
++	select BR2_PACKAGE_MESA3D_NEEDS_PRECOMP_COMPILER
+ 	help
+ 	  Mesa driver for ARM Mali Midgard and Bifrost GPUs.
+ 
++comment "panfrost driver needs llvm"
++	depends on !BR2_PACKAGE_MESA3D_LLVM
++
+ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_R300
+ 	bool "Gallium Radeon R300 driver"
+ 	depends on BR2_i386 || BR2_x86_64
+@@ -355,14 +365,6 @@ config BR2_PACKAGE_MESA3D_VULKAN_DRIVER_VIRTIO
+ 	help
+ 	  Vulkan VirtIO (venus) driver.
+ 
+-comment "Off-screen Rendering"
+-
+-config BR2_PACKAGE_MESA3D_OSMESA_GALLIUM
+-	bool "OSMesa (Gallium) library"
+-	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_SOFTPIPE
+-	help
+-	  The OSMesa API provides functions for off-screen rendering.
+-
+ if BR2_PACKAGE_MESA3D_DRIVER
+ 
+ comment "OpenGL API Support"
+diff --git a/package/mesa3d/mesa3d.hash b/package/mesa3d/mesa3d.hash
+index c94611ff..a3858d39 100644
+--- a/package/mesa3d/mesa3d.hash
++++ b/package/mesa3d/mesa3d.hash
+@@ -1,6 +1,6 @@
+-# From https://lists.freedesktop.org/archives/mesa-announce/2025-May/000803.html
+-sha256  0d179e019e3441f5d957330d7abb3b0ef38e6782cc85a382608cd1a4a77fa2e1  mesa-25.0.6.tar.xz
+-sha512  6a0abc8a5bbbb8ffdad7286fc5642f643b1f4183794425ba689c2c9f5c73a4131c8685074241deb1022631b4c1f1c505dbd848190ec60d5d6931e90dd9316e05  mesa-25.0.6.tar.xz
++# From https://lists.freedesktop.org/archives/mesa-announce/2025-August/000817.html
++sha256  5cf1571d0d646d90047f3d93f57acc787cf88ec7e95efe172c555b492c30fb71  mesa-25.1.8.tar.xz
++sha512  98435d52a2855c71b15060785c225dc674b3565545a8581a5dd501605a04f9d597636282f1bce61e7a2e8ee98c31ecf7fbccab594571e31bc8b827e18e98aaa5  mesa-25.1.8.tar.xz
+ # License
+ sha256  0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615  docs/license.rst
+ sha256  323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f  licenses/MIT
+diff --git a/package/mesa3d/mesa3d.mk b/package/mesa3d/mesa3d.mk
+index bc456a43..0332ca77 100644
+--- a/package/mesa3d/mesa3d.mk
++++ b/package/mesa3d/mesa3d.mk
+@@ -5,7 +5,7 @@
+ ################################################################################
+ 
+ # When updating the version, please also update mesa3d-headers
+-MESA3D_VERSION = 25.0.6
++MESA3D_VERSION = 25.1.8
+ MESA3D_SOURCE = mesa-$(MESA3D_VERSION).tar.xz
+ MESA3D_SITE = https://archive.mesa3d.org
+ MESA3D_LICENSE = MIT, SGI, Khronos
+@@ -30,10 +30,8 @@ MESA3D_DEPENDENCIES = \
+ 	zlib
+ 
+ MESA3D_CONF_OPTS = \
+-	-Dgallium-opencl=disabled \
+ 	-Dgallium-rusticl=false \
+-	-Dmicrosoft-clc=disabled \
+-	-Dpower8=disabled
++	-Dmicrosoft-clc=disabled
+ 
+ ifeq ($(BR2_PACKAGE_MESA3D_DRIVER)$(BR2_PACKAGE_XORG7),yy)
+ MESA3D_DEPENDENCIES += xlib_libxshmfence
+@@ -65,7 +63,7 @@ endif
+ ifeq ($(BR2_PACKAGE_MESA3D_OPENGL_GLX),y)
+ # Disable-mangling not yet supported by meson build system.
+ # glx:
+-#  dri          : dri based GLX requires at least one DRI driver || dri based GLX requires shared-glapi
++#  dri          : dri based GLX requires at least one DRI driver
+ #  xlib         : xlib conflicts with any dri driver
+ # Always enable glx-direct; without it, many GLX applications don't work.
+ MESA3D_CONF_OPTS += \
+@@ -96,10 +94,12 @@ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_ETNAVIV)  += etnaviv
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_FREEDRENO) += freedreno
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_I915)     += i915
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_IRIS)     += iris
++HOST_MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_IRIS) += iris
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_LIMA)     += lima
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_LLVMPIPE) += llvmpipe
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_NOUVEAU)  += nouveau
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST) += panfrost
++HOST_MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST) += panfrost
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_R300)     += r300
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_R600)     += r600
+ MESA3D_GALLIUM_DRIVERS-$(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_RADEONSI) += radeonsi
+@@ -122,7 +122,6 @@ MESA3D_CONF_OPTS += \
+ 	-Dgallium-extra-hud=false
+ else
+ MESA3D_CONF_OPTS += \
+-	-Dshared-glapi=enabled \
+ 	-Dgallium-drivers=$(subst $(space),$(comma),$(MESA3D_GALLIUM_DRIVERS-y)) \
+ 	-Dgallium-extra-hud=true
+ endif
+@@ -137,7 +136,7 @@ MESA3D_CONF_OPTS += -Dmesa-clc=system -Dprecomp-compiler=system
+ MESA3D_DEPENDENCIES += host-mesa3d spirv-llvm-translator spirv-tools
+ endif
+ 
+-ifeq ($(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_IRIS),y)
++ifeq ($(BR2_PACKAGE_MESA3D_NEEDS_PRECOMP_COMPILER),y)
+ MESA3D_CONF_OPTS += -Dmesa-clc=system -Dprecomp-compiler=system
+ MESA3D_DEPENDENCIES += host-mesa3d spirv-llvm-translator spirv-tools
+ endif
+@@ -153,12 +152,6 @@ endif
+ 
+ # APIs
+ 
+-ifeq ($(BR2_PACKAGE_MESA3D_OSMESA_GALLIUM),y)
+-MESA3D_CONF_OPTS += -Dosmesa=true
+-else
+-MESA3D_CONF_OPTS += -Dosmesa=false
+-endif
+-
+ # Always enable OpenGL:
+ #   - Building OpenGL ES without OpenGL is not supported, so always keep opengl enabled.
+ MESA3D_CONF_OPTS += -Dopengl=true
+@@ -275,11 +268,9 @@ else
+ MESA3D_CONF_OPTS += -Dglvnd=disabled
+ endif
+ 
+-# host-mesa3d is needed by mesa3d only when the Iris Gallium driver is
+-# enabled
+ HOST_MESA3D_CONF_OPTS = \
+ 	-Dglvnd=disabled \
+-	-Dgallium-drivers=iris \
++	-Dgallium-drivers=$(subst $(space),$(comma),$(HOST_MESA3D_GALLIUM_DRIVERS-y)) \
+ 	-Dgallium-vdpau=disabled \
+ 	-Dinstall-mesa-clc=true \
+ 	-Dmesa-clc=enabled \
+@@ -288,6 +279,10 @@ HOST_MESA3D_CONF_OPTS = \
+ 	-Dglx=disabled \
+ 	-Dvulkan-drivers=""
+ 
++ifeq ($(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST),y)
++HOST_MESA3D_CONF_OPTS += -Dtools=panfrost
++endif
++
+ HOST_MESA3D_DEPENDENCIES = \
+ 	host-libclc \
+ 	host-libdrm \
+@@ -295,9 +290,15 @@ HOST_MESA3D_DEPENDENCIES = \
+ 	host-python-pyyaml \
+ 	host-spirv-tools
+ 
++ifeq ($(BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST),y)
++HOST_MESA3D_INSTALL_PANFROST_COMPILE = \
++	$(INSTALL) -D -m 0755 $(@D)/buildroot-build/src/panfrost/clc/panfrost_compile $(HOST_DIR)/bin/panfrost_compile
++endif
++
+ define HOST_MESA3D_INSTALL_CMDS
+ 	$(INSTALL) -D -m 0755 $(@D)/buildroot-build/src/compiler/clc/mesa_clc $(HOST_DIR)/bin/mesa_clc
+-	$(INSTALL) -D -m 0755 $(@D)/buildroot-build/src/compiler/spirv/vtn_bindgen $(HOST_DIR)/bin/vtn_bindgen
++	$(INSTALL) -D -m 0755 $(@D)/buildroot-build/src/compiler/spirv/vtn_bindgen2 $(HOST_DIR)/bin/vtn_bindgen2
++	$(HOST_MESA3D_INSTALL_PANFROST_COMPILE)
+ endef
+ 
+ $(eval $(meson-package))
+diff --git a/package/wine/wine.mk b/package/wine/wine.mk
+index efee63a2..380f7295 100644
+--- a/package/wine/wine.mk
++++ b/package/wine/wine.mk
+@@ -33,7 +33,8 @@ WINE_CONF_OPTS = \
+ 	--without-mingw \
+ 	--without-opencl \
+ 	--without-oss \
+-	--without-vulkan
++	--without-vulkan \
++	--without-osmesa  # BR2_PACKAGE_MESA3D_OSMESA_GALLIUM removed in mesa 25.1
+ 
+ # Wine uses a wrapper around gcc, and uses the value of --host to
+ # construct the filename of the gcc to call.  But for external
+@@ -143,13 +144,6 @@ else
+ WINE_CONF_OPTS += --without-v4l2
+ endif
+ 
+-ifeq ($(BR2_PACKAGE_MESA3D_OSMESA_GALLIUM),y)
+-WINE_CONF_OPTS += --with-osmesa
+-WINE_DEPENDENCIES += mesa3d
+-else
+-WINE_CONF_OPTS += --without-osmesa
+-endif
+-
+ ifeq ($(BR2_PACKAGE_PCSC_LITE),y)
+ WINE_CONF_OPTS += --with-pcsclite
+ WINE_DEPENDENCIES += pcsc-lite

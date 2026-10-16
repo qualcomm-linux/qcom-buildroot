@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sat, 3 Oct 2026 15:55:03 -0400
+Subject: [PATCH 8/8] package/spirv-*: bump to SPIRV-Tools 2024.1
+
+Mesa 25.1 needs SPIRV-Tools 2024.1 or later for its OpenCL C
+compiler (RustiCL); 1.3.261.1 is 2023.4.1. Bump SPIRV-Headers and
+SPIRV-Tools to Vulkan SDK 1.3.280.0 (2024.1, tags named
+vulkan-sdk-<version>), and SPIRV-LLVM-Translator, which still has to
+match LLVM 15, to the last llvm_release_150 commit before it needs newer
+headers (ef0baf08c5ed): v15.0.0-46 uses
+CapabilityLongConstantCompositeINTEL, which these headers call
+CapabilityLongCompositesINTEL.
+
+The SPIRV-Headers LICENSE file now lists the terms per file set (all
+MIT; the bundled jsoncpp is also public domain): the license does not
+change.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ package/spirv-headers/spirv-headers.hash                 | 4 ++--
+ package/spirv-headers/spirv-headers.mk                   | 4 ++--
+ package/spirv-llvm-translator/spirv-llvm-translator.hash | 2 +-
+ package/spirv-llvm-translator/spirv-llvm-translator.mk   | 2 +-
+ package/spirv-tools/spirv-tools.hash                     | 2 +-
+ package/spirv-tools/spirv-tools.mk                       | 4 ++--
+ 6 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/package/spirv-headers/spirv-headers.hash b/package/spirv-headers/spirv-headers.hash
+index 136f3df7..00e1b3c2 100644
+--- a/package/spirv-headers/spirv-headers.hash
++++ b/package/spirv-headers/spirv-headers.hash
+@@ -1,3 +1,3 @@
+ # Locally calculated
+-sha256  32b4c6ae6a2fa9b56c2c17233c8056da47e331f76e117729925825ea3e77a739  spirv-headers-1.3.261.1.tar.gz
+-sha256  9b243f6f0bf44e295ff411a0f7b7642d1d0dff7cdc42507e9f7206f439e51b5a  LICENSE
++sha256  a00906b6bddaac1e37192eff2704582f82ce2d971f1aacee4d51d9db33b0f772  spirv-headers-1.3.280.0.tar.gz
++sha256  ff04ae7e6a468587fe59434fee2e67c0e2a749b592c794b764ff80f30b94a084  LICENSE
+diff --git a/package/spirv-headers/spirv-headers.mk b/package/spirv-headers/spirv-headers.mk
+index 9f84c42b..640d53fa 100644
+--- a/package/spirv-headers/spirv-headers.mk
++++ b/package/spirv-headers/spirv-headers.mk
+@@ -5,8 +5,8 @@
+ ################################################################################
+ 
+ # Keep in sync with spirv-tools version
+-SPIRV_HEADERS_VERSION = 1.3.261.1
+-SPIRV_HEADERS_SITE = $(call github,KhronosGroup,SPIRV-Headers,sdk-$(SPIRV_HEADERS_VERSION))
++SPIRV_HEADERS_VERSION = 1.3.280.0
++SPIRV_HEADERS_SITE = $(call github,KhronosGroup,SPIRV-Headers,vulkan-sdk-$(SPIRV_HEADERS_VERSION))
+ SPIRV_HEADERS_LICENSE = MIT
+ SPIRV_HEADERS_LICENSE_FILES = LICENSE
+ 
+diff --git a/package/spirv-llvm-translator/spirv-llvm-translator.hash b/package/spirv-llvm-translator/spirv-llvm-translator.hash
+index 4500fc4f..f30c3055 100644
+--- a/package/spirv-llvm-translator/spirv-llvm-translator.hash
++++ b/package/spirv-llvm-translator/spirv-llvm-translator.hash
+@@ -1,3 +1,3 @@
+ # locally calculated
+-sha256  0a00a72a5b004eeb73f9c96c9c6ba2d6de232cbf3c22a7b322047604d24402ba  spirv-llvm-translator-v15.0.0-46-ge82ecc2bd7295604fcf1824e47c95fa6a09c6e63.tar.gz
++sha256  3d7667196f3a58c315731c6d7f211c2a882cd417bd0a8cb85a6b6c99fa87daa6  spirv-llvm-translator-v15.0.0-98-gef0baf08c5ed492f582958f2ce0a5883ab4ea79a.tar.gz
+ sha256  e3bc36440fc927c62d5cc24efeefe225a14d4e34ffeb0c92e430625cce9ee444  LICENSE.TXT
+diff --git a/package/spirv-llvm-translator/spirv-llvm-translator.mk b/package/spirv-llvm-translator/spirv-llvm-translator.mk
+index ffc8a63b..9def7656 100644
+--- a/package/spirv-llvm-translator/spirv-llvm-translator.mk
++++ b/package/spirv-llvm-translator/spirv-llvm-translator.mk
+@@ -6,7 +6,7 @@
+ 
+ # Generate version string using:
+ #   git describe --tags --match 'v15*' --abbrev=40 origin/llvm_release_150
+-SPIRV_LLVM_TRANSLATOR_VERSION = v15.0.0-46-ge82ecc2bd7295604fcf1824e47c95fa6a09c6e63
++SPIRV_LLVM_TRANSLATOR_VERSION = v15.0.0-98-gef0baf08c5ed492f582958f2ce0a5883ab4ea79a
+ SPIRV_LLVM_TRANSLATOR_SITE = $(call github,KhronosGroup,SPIRV-LLVM-Translator,$(SPIRV_LLVM_TRANSLATOR_VERSION))
+ SPIRV_LLVM_TRANSLATOR_LICENSE = NCSA
+ SPIRV_LLVM_TRANSLATOR_LICENSE_FILES = LICENSE.TXT
+diff --git a/package/spirv-tools/spirv-tools.hash b/package/spirv-tools/spirv-tools.hash
+index 65cb9c61..6695069d 100644
+--- a/package/spirv-tools/spirv-tools.hash
++++ b/package/spirv-tools/spirv-tools.hash
+@@ -1,3 +1,3 @@
+ # Locally calculated
+-sha256  ead95c626ad482882a141d1aa0ce47b9453871f72c42c0b28d39c82f60a52008  spirv-tools-1.3.261.1.tar.gz
++sha256  703c772a850fa7fbe57a2f8dc99b4c1422a59fa5ff098a80c8ce12fcdf6a2613  spirv-tools-1.3.280.0.tar.gz
+ sha256  cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30  LICENSE
+diff --git a/package/spirv-tools/spirv-tools.mk b/package/spirv-tools/spirv-tools.mk
+index 51b1c9f2..ea2901a7 100644
+--- a/package/spirv-tools/spirv-tools.mk
++++ b/package/spirv-tools/spirv-tools.mk
+@@ -5,8 +5,8 @@
+ ################################################################################
+ 
+ # Keep in sync with spirv-headers version
+-SPIRV_TOOLS_VERSION = 1.3.261.1
+-SPIRV_TOOLS_SITE = $(call github,KhronosGroup,SPIRV-Tools,sdk-$(SPIRV_TOOLS_VERSION))
++SPIRV_TOOLS_VERSION = 1.3.280.0
++SPIRV_TOOLS_SITE = $(call github,KhronosGroup,SPIRV-Tools,vulkan-sdk-$(SPIRV_TOOLS_VERSION))
+ SPIRV_TOOLS_LICENSE = Apache-2.0
+ SPIRV_TOOLS_LICENSE_FILES = LICENSE
+ SPIRV_TOOLS_DEPENDENCIES = spirv-headers
