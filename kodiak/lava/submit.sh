@@ -77,7 +77,7 @@ SZ="$(stat -c%s "$TARBALL")"
 # in ~/.claude.json (or $LAVA_TOKEN) — no login, no AICP cost, no LLM in a
 # plumbing path.
 echo ">> [1/4] minting upload URL via LAVA MCP (direct HTTP, no claude) ..."
-MINT="$(LAVA_URL="$LAVA_URL" CLAUDE_JSON="$CLAUDE_JSON" ${LAVA_TOKEN:+LAVA_TOKEN="$LAVA_TOKEN"} python3 "$(dirname "$0")/mint_lava.py" "$FN" "$SZ")"
+MINT="$(LAVA_URL="$LAVA_URL" CLAUDE_JSON="$CLAUDE_JSON" ${LAVA_TOKEN:+LAVA_TOKEN="$LAVA_TOKEN"} python3 "$(dirname "$0")/../../qcom/lava/mint_lava.py" "$FN" "$SZ")"
 [ -n "$MINT" ] || { echo "ERROR: could not mint an upload URL via the MCP (token valid? lava reachable?)" >&2; exit 1; }
 GET_URL="$(printf %s "$MINT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["get_url"])')"
 UP_TOK="$(printf %s "$MINT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')"

@@ -69,7 +69,7 @@ mint_and_upload() {
   local tarball="$1" fn sz mint get_url up_tok
   fn="$(basename "$tarball")"
   sz="$(stat -c%s "$tarball")"
-  mint="$(LAVA_URL="$LAVA_URL" CLAUDE_JSON="$CLAUDE_JSON" ${LAVA_TOKEN:+LAVA_TOKEN="$LAVA_TOKEN"} python3 "$(dirname "$0")/mint_lava.py" "$fn" "$sz")"
+  mint="$(LAVA_URL="$LAVA_URL" CLAUDE_JSON="$CLAUDE_JSON" ${LAVA_TOKEN:+LAVA_TOKEN="$LAVA_TOKEN"} python3 "$(dirname "$0")/../../qcom/lava/mint_lava.py" "$fn" "$sz")"
   [ -n "$mint" ] || { echo "ERROR: could not mint an upload URL for $fn via the MCP" >&2; exit 1; }
   get_url="$(printf %s "$mint" | python3 -c 'import json,sys;print(json.load(sys.stdin)["get_url"])')"
   up_tok="$(printf %s "$mint" | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')"
