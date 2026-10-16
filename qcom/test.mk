@@ -34,9 +34,11 @@
 #   video-codec ffmpeg with the V4L2 mem2mem decoders and encoders, and the
 #               reference streams with the MD5s of their software decode in
 #               /usr/share/video-codec
-#   inference   (GPU and CPU entries) tflite-run (tflite_run_ext) on
+#   inference   fastrpc (QNN HTP), tflite-run (tflite_run_ext) on
 #               TensorFlow Lite with XNNPACK and the GPU delegate, OpenCL from
-#               Mesa RustiCL, clinfo
+#               Mesa RustiCL, clinfo; with QCOM_TEST_INFERENCE_MODEL=y the
+#               MobileNetV2 model with its inputs and reference outputs in
+#               /usr/share/npu-qnn/model (qcom/test/npu/mk-npu-model.sh)
 # Tests whose tool is missing report skip, except optee-xtest and memtester,
 # which fail, and kvm-unit-tests, which reports nothing (its runner then
 # tries to fetch and build a copy).
@@ -47,7 +49,7 @@ QCOM_TESTS_ALL = boot-fingerprint boot-handoff cpu-features cpu-hotplug \
 		 cpufreq-policy kernel-health maxcpus memtest remoteproc-smoke \
 		 remoteproc-restart fastrpc optee-xtest alsa-dsp-restart \
 		 memtester kvm-unit-tests kvm-guest gpu-render \
-		 video-codec
+		 video-codec inference
 QCOM_TESTS ?= $(QCOM_TESTS_ALL)
 
 ifeq ($(TEST),y)
@@ -58,7 +60,7 @@ ifneq ($(call qcom-test,cpufreq-policy cpu-hotplug),)
 BR2_PACKAGE_STRESS_NG ?= y
 endif
 
-ifneq ($(call qcom-test,fastrpc),)
+ifneq ($(call qcom-test,fastrpc inference),)
 BR2_PACKAGE_FASTRPC_EXT ?= y
 endif
 
@@ -240,6 +242,47 @@ test-video-buildroot-patches:
 	done
 
 buildroot: test-video-streams test-video-buildroot-patches
+endif
+
+################################################################################
+# Inference model (inference)
+#
+# MobileNetV2 as two QAIRT DLCs (fp32 for the QNN CPU backend, 8-bit for the
+# HTP) and as TensorFlow Lite, seven public domain or CC0 test images
+# preprocessed to the model input, the expected classes and the x86
+# reference outputs, in /usr/share/npu-qnn/model. qcom/test/npu/mk-npu-model.sh
+# builds it from pinned public inputs; the QAIRT SDK it converts with is
+# fetched from Qualcomm and used on the build host only, never put in the
+# image (the test gets the QAIRT runtime from the LAVA job). Building the
+# model needs an x86_64 host.
+#
+# The model is an input of the inference test (MODEL_DIR), which a job can
+# supply like the QAIRT SDK, and making it fetches that proprietary SDK, so
+# it is opt-in: QCOM_TEST_INFERENCE_MODEL=y puts it in the rootfs. Without
+# it the image still has every runtime the test drives (TensorFlow Lite with
+# XNNPACK and the GPU delegate, OpenCL, fastrpc, tflite-run).
+################################################################################
+QCOM_TEST_INFERENCE_MODEL ?= n
+
+ifeq ($(QCOM_TEST_INFERENCE_MODEL),y)
+ifneq ($(call qcom-test,inference),)
+QCOM_TEST_NPU_MODEL_DIR ?= $(ROOT)/out/npu-model
+BR2_ROOTFS_OVERLAY      += $(QCOM_TEST_NPU_MODEL_DIR)
+
+QCOM_TEST_NPU_MODEL = $(QCOM_TEST_NPU_MODEL_DIR)/usr/share/npu-qnn/model
+
+.PHONY: test-npu-model test-npu-model-clean
+test-npu-model: $(QCOM_TEST_NPU_MODEL)/MANIFEST.sha256
+
+$(QCOM_TEST_NPU_MODEL)/MANIFEST.sha256: $(wildcard $(CURDIR)/qcom/test/npu/*)
+	NPU_CACHE=$(ROOT)/out/npu-cache $(CURDIR)/qcom/test/npu/mk-npu-model.sh \
+		$(QCOM_TEST_NPU_MODEL)
+
+test-npu-model-clean:
+	rm -rf $(QCOM_TEST_NPU_MODEL_DIR) $(ROOT)/out/npu-cache
+
+buildroot: test-npu-model
+endif
 endif
 
 endif
