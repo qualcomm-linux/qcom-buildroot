@@ -25,3 +25,4 @@ pi3.cfg
 /oe-core/
 /yocto/
 /bitbake/
+__pycache__/
