@@ -49,6 +49,25 @@ No Qualcomm account is required; the download takes a few minutes.
 
 See `{platform}/input/README.md` for the full file-by-file breakdown.
 
+## Test packages
+
+The root filesystem carries what the open boot stack test suite
+(test-definitions, `automated/linux/*`) needs, from `qcom/test.mk`, which
+every Qualcomm board includes: stress-ng, fastrpc, xtest, alsa-utils,
+memtester, kvmtool with the KVM unit tests and a KVM guest, idregs-arm64, Mesa
+with egl-readback, OpenCL and TensorFlow Lite with tflite-run, and FFmpeg with
+the video test streams. `TEST=n` leaves them out (except xtest, which
+`common.mk` selects); `QCOM_TESTS` narrows them to the tests a board runs. The
+header of `qcom/test.mk` lists what each test needs.
+
+Building them needs, besides the usual host tools, a host `ffmpeg` with
+libx264, libx265 and libvpx (the video test streams). Proprietary SDKs are
+never part of the image: the inference test gets the Qualcomm AI Runtime
+from its job, and its model too, unless `QCOM_TEST_INFERENCE_MODEL=y` builds
+the model into the rootfs (this downloads the SDK to convert the model on the
+build host, and needs an x86_64 host with `libc++1`, `libc++abi1` and
+`libatomic1`).
+
 ## Documentation
 
 HTML documentation for each platform is in `docs/`. Open `docs/index.html` as the

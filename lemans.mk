@@ -102,15 +102,10 @@ BR2_PACKAGE_OPENSSH_KEY_UTILS ?= y
 # OpenSSL CLI
 BR2_PACKAGE_LIBOPENSSL_BIN ?= y
 
-# stress-ng — CPU/thermal soak load generator. Drives the qcom-tests "CPU
-# stress" option for multi-hour stability runs; the runner falls back to a
-# busybox 'yes' busy-loop if this is ever disabled.
-BR2_PACKAGE_STRESS_NG ?= y
-
-# Qualcomm FastRPC test — validates the OP-TEE PAS coprocessor reset sequence.
-# NOTE: upstream ships DSP skel stubs for v68/v75 only; the SA8775P CDSP is v73,
-# so the bundled calculator workload may have no matching skel at runtime.
-BR2_PACKAGE_FASTRPC_EXT ?= y
+# The test packages come from qcom/test.mk (TEST=y, the default), for the
+# tests this board runs (lava/test-plan) and the qcom-tests runner. Add a
+# test here when the plan gains one.
+QCOM_TESTS ?= boot-handoff remoteproc-smoke fastrpc optee-xtest qcom-tests
 
 # QRTR userspace (libqrtr + qrtr-ns). qrtr-ns is the QMI name service the DSP
 # subsystems need to register their servreg protection domains; without it the
@@ -123,27 +118,6 @@ BR2_PACKAGE_QRTR_EXT ?= y
 # fastrpc glink channel opens but the DSP never posts RX intents. Launched
 # from an init script after qrtr-ns.
 BR2_PACKAGE_TQFTPSERV_EXT ?= y
-
-# Video decoder validation. v4l-utils gives v4l2-ctl for capability/format
-# enumeration; GStreamer gives an end-to-end decode pipeline. The iris/venus
-# codec is a V4L2 *stateful* decoder, so the elements are v4l2h264dec /
-# v4l2h265dec (registered by the m2m probe), fed by h264parse/h265parse
-# (videoparsers) and qtdemux (isomp4). Needs C++ (already on via the toolchain).
-BR2_INSTALL_LIBSTDCPP                            ?= y
-BR2_PACKAGE_LIBV4L                               ?= y
-BR2_PACKAGE_LIBV4L_UTILS                         ?= y
-BR2_PACKAGE_GSTREAMER1                           ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE                    ?= y
-# Base sub-plugins default off; videotestsrc feeds the encode test and
-# videoconvertscale (videoconvert) handles the NV12 conversion the encoder needs.
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOTESTSRC     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOCONVERTSCALE ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD                    ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2        ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2_PROBE  ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_ISOMP4      ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD                     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_VIDEOPARSERS ?= y
 
 # Root filesystem — compressed CPIO for use as initramfs
 BR2_TARGET_GENERIC_ISSUE     = "OP-TEE embedded distrib for $(PLATFORM)"
@@ -237,6 +211,7 @@ BOOTAA64_EFI = $(CURDIR)/lemans/input/bootaa64.efi
 
 include common.mk
 include toolchain.mk
+include qcom/test.mk
 
 # common.mk passes CFG_IN_TREE_EARLY_TAS to OP-TEE on the make command line,
 # which turns the platform target.mk's '+= qcom_pas/...' into a no-op. Append
@@ -1653,7 +1628,7 @@ $(BLOBS_STAMP):
 
 fetch-blobs-clean:
 	@# Remove only generated staging — NOT $(OVERLAY_DIR) itself, which also
-	@# holds version-controlled overlay files (etc/init.d/*, usr/bin/qcom-tests).
+	@# holds version-controlled overlay files (etc/init.d/*).
 	rm -rf $(BLOBS_DIR) $(FW_DEST_DIR) $(FW_VPU_DEST) $(DSP_SHARE_DIR)
 
 ################################################################################

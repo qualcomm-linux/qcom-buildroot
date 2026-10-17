@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sat, 3 Oct 2026 11:31:29 -0400
+Subject: [PATCH 5/6] package/mesa3d: allow RustiCL with the freedreno driver
+
+Mesa supports RustiCL on freedreno since 24.3, but the driver does not
+select BR2_PACKAGE_MESA3D_RUSTICL_SUPPORTED_DRIVER, so OpenCL cannot be
+enabled for Adreno GPUs. Select it. Mesa 25.1 still leaves the freedreno
+device disabled unless RUSTICL_ENABLE names it; 25.2 enables it by
+default.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ package/mesa3d/Config.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/package/mesa3d/Config.in b/package/mesa3d/Config.in
+index 2d357ca7..fa6f60b2 100644
+--- a/package/mesa3d/Config.in
++++ b/package/mesa3d/Config.in
+@@ -148,6 +148,7 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_FREEDRENO
+ 	# for arm/aarch64.
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+ 	select BR2_PACKAGE_LIBDRM_FREEDRENO
++	select BR2_PACKAGE_MESA3D_RUSTICL_SUPPORTED_DRIVER
+ 	help
+ 	  Mesa driver for Freedreno GPUs.
+ 

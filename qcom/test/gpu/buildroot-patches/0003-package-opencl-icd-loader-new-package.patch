@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: El Mehdi YOUNES <elmehdi.younes@smile.fr>
+Date: Fri, 6 Jun 2025 09:01:50 +0200
+Subject: [PATCH 3/6] package/opencl-icd-loader: new package
+
+This adds the OpenCL installable client driver (ICD) loader
+which provides the 'libOpenCL.so' shared library needed to
+run OpenCL programs.
+
+Mesa3D can offer opencl implementations (such as rusticl),
+but it does not provide 'libOpenCL.so'.
+
+Without it, programs like 'clinfo' fail to build not
+finding 'libOpenCL.so'.
+
+see:
+https://github.com/KhronosGroup/OpenCL-ICD-Loader
+
+Signed-off-by: El Mehdi YOUNES <elmehdi.younes@smile.fr>
+[Julien: add Medhi in DEVELOPERS for this package]
+Signed-off-by: Julien Olivain <ju.o@free.fr>
+(cherry picked from commit d2a82364ac92, Buildroot 2025.08)
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ DEVELOPERS                                    |  1 +
+ package/Config.in                             |  1 +
+ package/opencl-icd-loader/Config.in           | 12 ++++++++++
+ .../opencl-icd-loader/opencl-icd-loader.hash  |  3 +++
+ .../opencl-icd-loader/opencl-icd-loader.mk    | 22 +++++++++++++++++++
+ 5 files changed, 39 insertions(+)
+ create mode 100644 package/opencl-icd-loader/Config.in
+ create mode 100644 package/opencl-icd-loader/opencl-icd-loader.hash
+ create mode 100644 package/opencl-icd-loader/opencl-icd-loader.mk
+
+diff --git a/DEVELOPERS b/DEVELOPERS
+index 931afe3e..90740ba7 100644
+--- a/DEVELOPERS
++++ b/DEVELOPERS
+@@ -913,6 +913,7 @@ F:	package/docopt-cpp/
+ 
+ N:	El Mehdi YOUNES <elmehdi.younes@smile.fr>
+ F:	package/opencl-headers/
++F:	package/opencl-icd-loader/
+ 
+ N:	Eloi Bail <eloi.bail@savoirfairelinux.com>
+ F:	package/bayer2rgb-neon/
+diff --git a/package/Config.in b/package/Config.in
+index fae21d1d..71a9fd43 100644
+--- a/package/Config.in
++++ b/package/Config.in
+@@ -1788,6 +1788,7 @@ menu "Graphics"
+ 	source "package/menu-cache/Config.in"
+ 	source "package/opencl-clhpp/Config.in"
+ 	source "package/opencl-headers/Config.in"
++	source "package/opencl-icd-loader/Config.in"
+ 	source "package/opencv3/Config.in"
+ 	source "package/opencv4/Config.in"
+ 	source "package/opencv4-contrib/Config.in"
+diff --git a/package/opencl-icd-loader/Config.in b/package/opencl-icd-loader/Config.in
+new file mode 100644
+index 00000000..405dc540
+--- /dev/null
++++ b/package/opencl-icd-loader/Config.in
+@@ -0,0 +1,12 @@
++config BR2_PACKAGE_OPENCL_ICD_LOADER
++	bool "OpenCL-ICD-Loader"
++	depends on BR2_INSTALL_LIBSTDCPP
++	depends on BR2_PACKAGE_HAS_LIBOPENCL
++	select BR2_PACKAGE_OPENCL_HEADERS
++	help
++	  OpenCL defines an Installable Client Driver (ICD) mechanism to
++	  allow developers to build applications against an Installable
++	  Client Driver loader (ICD loader) rather than linking their
++	  applications against a specific OpenCL implementation.
++
++	  https://github.com/KhronosGroup/OpenCL-ICD-Loader
+diff --git a/package/opencl-icd-loader/opencl-icd-loader.hash b/package/opencl-icd-loader/opencl-icd-loader.hash
+new file mode 100644
+index 00000000..da9f75b6
+--- /dev/null
++++ b/package/opencl-icd-loader/opencl-icd-loader.hash
+@@ -0,0 +1,3 @@
++# locally generated
++sha256  95f2f0cda375b13d2760290df044ebea9c6ff954a7d7faa0867422442c9174dc  OpenCL-ICD-Loader-2024.10.24.tar.gz
++sha256  c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4  LICENSE
+diff --git a/package/opencl-icd-loader/opencl-icd-loader.mk b/package/opencl-icd-loader/opencl-icd-loader.mk
+new file mode 100644
+index 00000000..cb3d7e46
+--- /dev/null
++++ b/package/opencl-icd-loader/opencl-icd-loader.mk
+@@ -0,0 +1,22 @@
++################################################################################
++#
++# opencl-icd-loader
++#
++################################################################################
++
++# The opencl-headers, opencl-icd-loader, and opencl-clhpp packages
++# must always be updated together to compatible versions.
++# Version desynchronization may result in build or runtime errors.
++# When updating one of them, make sure to check and update the others.
++OPENCL_ICD_LOADER_VERSION = 2024.10.24
++OPENCL_ICD_LOADER_SOURCE = OpenCL-ICD-Loader-$(OPENCL_ICD_LOADER_VERSION).tar.gz
++OPENCL_ICD_LOADER_SITE = $(call github,KhronosGroup,OpenCL-ICD-Loader,v$(OPENCL_ICD_LOADER_VERSION))
++OPENCL_ICD_LOADER_LICENSE = Apache-2.0
++OPENCL_ICD_LOADER_LICENSE_FILES = LICENSE
++OPENCL_ICD_LOADER_INSTALL_STAGING = YES
++
++OPENCL_ICD_LOADER_DEPENDENCIES = opencl-headers
++
++OPENCL_ICD_LOADER_CONF_OPTS += -DOPENCL_ICD_LOADER_HEADERS_DIR=$(STAGING_DIR)/usr/include
++
++$(eval $(cmake-package))

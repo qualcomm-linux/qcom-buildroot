@@ -1,0 +1,164 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sat, 3 Oct 2026 11:33:07 -0400
+Subject: [PATCH 6/8] package/tensorflow-lite: add an option for the GPU
+ delegate
+
+The package always builds TensorFlow Lite without its GPU delegate. Add
+BR2_PACKAGE_TENSORFLOW_LITE_GPU, which builds the delegate with only its
+OpenCL backend (TFLITE_ENABLE_GPU sets CL_DELEGATE_NO_GL), as on Linux
+boards whose OpenCL comes from Mesa RustiCL. The delegate's CMake
+modules fetch the OpenCL, Vulkan, EGL, OpenGL and FP16 headers; take
+them from the staging directory instead, and install the delegate's C
+API headers, which the install rule leaves out.
+
+With the staging OpenCL-Headers (2024.10.24) and abseil-cpp (20250127),
+2.11 needs a patch: the command buffer properties type was renamed, and
+three files used absl::StrCat without including str_cat.h.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ ...th-current-OpenCL-headers-and-abseil.patch | 62 +++++++++++++++++++
+ package/tensorflow-lite/Config.in             | 19 ++++++
+ package/tensorflow-lite/tensorflow-lite.mk    | 25 +++++++-
+ 3 files changed, 105 insertions(+), 1 deletion(-)
+ create mode 100644 package/tensorflow-lite/0006-lite-delegates-gpu-build-with-current-OpenCL-headers-and-abseil.patch
+
+diff --git a/package/tensorflow-lite/0006-lite-delegates-gpu-build-with-current-OpenCL-headers-and-abseil.patch b/package/tensorflow-lite/0006-lite-delegates-gpu-build-with-current-OpenCL-headers-and-abseil.patch
+new file mode 100644
+index 00000000..1312144c
+--- /dev/null
++++ b/package/tensorflow-lite/0006-lite-delegates-gpu-build-with-current-OpenCL-headers-and-abseil.patch
+@@ -0,0 +1,62 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Tyler Baker <tyler.baker@oss.qualcomm.com>
++Date: Sat, 3 Oct 2026 17:10:00 -0400
++Subject: [PATCH] lite/delegates/gpu: build with current OpenCL headers and
++ abseil
++
++OpenCL-Headers 2024.10.24 name the command buffer properties type
++cl_command_properties_khr (cl_ndrange_kernel_command_properties_khr
++before), and abseil 20250127 no longer pulls in absl/strings/str_cat.h
++through the headers these files include.
++
++Upstream: N/A, TensorFlow 2.11 build fix for the OpenCL-Headers and
++abseil-cpp of this Buildroot
++
++Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
++---
++diff --git a/tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h b/tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h
++--- a/tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h
+++++ b/tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h
++@@ -546,7 +546,7 @@
++ typedef cl_int(CL_API_CALL *PFN_clCommandNDRangeKernelKHR)(
++     cl_command_buffer_khr /*command_buffer*/,
++     cl_command_queue /*command_queue*/,
++-    const cl_ndrange_kernel_command_properties_khr * /*properties*/,
+++    const cl_command_properties_khr * /*properties*/,
++     cl_kernel /*kernel*/, cl_uint /*work_dim*/,
++     const size_t * /*global_work_offset*/, const size_t * /*global_work_size*/,
++     const size_t * /*local_work_size*/,
++diff --git a/tensorflow/lite/delegates/gpu/cl/cl_operation.h b/tensorflow/lite/delegates/gpu/cl/cl_operation.h
++--- a/tensorflow/lite/delegates/gpu/cl/cl_operation.h
+++++ b/tensorflow/lite/delegates/gpu/cl/cl_operation.h
++@@ -22,6 +22,7 @@
++ #include <utility>
++ #include <vector>
++ 
+++#include "absl/strings/str_cat.h"
++ #include "tensorflow/lite/delegates/gpu/cl/cl_arguments.h"
++ #include "tensorflow/lite/delegates/gpu/cl/cl_command_queue.h"
++ #include "tensorflow/lite/delegates/gpu/cl/cl_context.h"
++diff --git a/tensorflow/lite/delegates/gpu/common/task/qcom_thin_filter_desc.cc b/tensorflow/lite/delegates/gpu/common/task/qcom_thin_filter_desc.cc
++--- a/tensorflow/lite/delegates/gpu/common/task/qcom_thin_filter_desc.cc
+++++ b/tensorflow/lite/delegates/gpu/common/task/qcom_thin_filter_desc.cc
++@@ -18,6 +18,8 @@
++ #include <string>
++ #include <vector>
++ 
+++#include "absl/strings/str_cat.h"
+++
++ namespace tflite {
++ namespace gpu {
++ 
++diff --git a/tensorflow/lite/delegates/gpu/common/tasks/special/thin_pointwise_fuser.cc b/tensorflow/lite/delegates/gpu/common/tasks/special/thin_pointwise_fuser.cc
++--- a/tensorflow/lite/delegates/gpu/common/tasks/special/thin_pointwise_fuser.cc
+++++ b/tensorflow/lite/delegates/gpu/common/tasks/special/thin_pointwise_fuser.cc
++@@ -24,6 +24,7 @@
++ #include <utility>
++ #include <vector>
++ 
+++#include "absl/strings/str_cat.h"
++ #include "absl/strings/str_replace.h"
++ #include "tensorflow/lite/delegates/gpu/common/flops_util.h"
++ #include "tensorflow/lite/delegates/gpu/common/model.h"
+diff --git a/package/tensorflow-lite/Config.in b/package/tensorflow-lite/Config.in
+index 99d21962..f3597321 100644
+--- a/package/tensorflow-lite/Config.in
++++ b/package/tensorflow-lite/Config.in
+@@ -30,6 +30,25 @@ config BR2_PACKAGE_TENSORFLOW_LITE
+ 
+ 	  https://www.tensorflow.org/
+ 
++if BR2_PACKAGE_TENSORFLOW_LITE
++
++config BR2_PACKAGE_TENSORFLOW_LITE_GPU
++	bool "GPU delegate (OpenCL)"
++	depends on BR2_PACKAGE_HAS_LIBEGL # EGL headers
++	select BR2_PACKAGE_FP16
++	select BR2_PACKAGE_OPENCL_HEADERS
++	select BR2_PACKAGE_VULKAN_HEADERS
++	help
++	  Build the GPU delegate with its OpenCL backend only
++	  (CL_DELEGATE_NO_GL). The delegate loads libOpenCL at run
++	  time, so it needs an OpenCL implementation and ICD loader
++	  on the target, e.g. Mesa RustiCL.
++
++comment "GPU delegate needs EGL"
++	depends on !BR2_PACKAGE_HAS_LIBEGL
++
++endif
++
+ comment "tensorflow-lite needs a toolchain w/ gcc >= 8, C++, threads"
+ 	depends on !BR2_TOOLCHAIN_USES_GLIBC || !BR2_INSTALL_LIBSTDCPP || \
+ 			!BR2_TOOLCHAIN_GCC_AT_LEAST_8 || !BR2_TOOLCHAIN_HAS_THREADS
+diff --git a/package/tensorflow-lite/tensorflow-lite.mk b/package/tensorflow-lite/tensorflow-lite.mk
+index 433eff32..973c48f2 100644
+--- a/package/tensorflow-lite/tensorflow-lite.mk
++++ b/package/tensorflow-lite/tensorflow-lite.mk
+@@ -37,11 +37,34 @@ TENSORFLOW_LITE_CONF_OPTS = \
+ 	-DNEON_2_SSE_DIR=$(STAGING_DIR)/usr/lib/cmake/NEON_2_SSE \
+ 	-DSYSTEM_FARMHASH=ON \
+ 	-DTFLITE_ENABLE_EXTERNAL_DELEGATE=ON \
+-	-DTFLITE_ENABLE_GPU=OFF \
+ 	-DTFLITE_ENABLE_INSTALL=ON \
+ 	-DTFLITE_ENABLE_MMAP=ON \
+ 	-DTFLITE_ENABLE_NNAPI=OFF
+ 
++# The GPU delegate's header modules would fetch the Khronos headers; the
++# staging directory has them, so mark them as already populated.
++ifeq ($(BR2_PACKAGE_TENSORFLOW_LITE_GPU),y)
++TENSORFLOW_LITE_DEPENDENCIES += fp16 libegl opencl-headers vulkan-headers
++TENSORFLOW_LITE_CONF_OPTS += \
++	-DTFLITE_ENABLE_GPU=ON \
++	-Degl_headers_POPULATED=ON \
++	-Dfp16_headers_POPULATED=ON \
++	-Dopencl_headers_POPULATED=ON \
++	-Dopengl_headers_POPULATED=ON \
++	-Dvulkan_headers_POPULATED=ON
++
++# The install rule leaves out the headers of the delegate's C API.
++define TENSORFLOW_LITE_INSTALL_GPU_DELEGATE_HEADERS
++	$(INSTALL) -D -m 0644 $(@D)/tensorflow/lite/delegates/gpu/delegate.h \
++		$(STAGING_DIR)/usr/include/tensorflow/lite/delegates/gpu/delegate.h
++	$(INSTALL) -D -m 0644 $(@D)/tensorflow/lite/delegates/gpu/delegate_options.h \
++		$(STAGING_DIR)/usr/include/tensorflow/lite/delegates/gpu/delegate_options.h
++endef
++TENSORFLOW_LITE_POST_INSTALL_STAGING_HOOKS += TENSORFLOW_LITE_INSTALL_GPU_DELEGATE_HEADERS
++else
++TENSORFLOW_LITE_CONF_OPTS += -DTFLITE_ENABLE_GPU=OFF
++endif
++
+ ifeq ($(BR2_PACKAGE_RUY),y)
+ TENSORFLOW_LITE_DEPENDENCIES += ruy
+ TENSORFLOW_LITE_CONF_OPTS += -DTFLITE_ENABLE_RUY=ON

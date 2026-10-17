@@ -6,15 +6,20 @@ against a locally attached board. The lab boards are not USB-reachable, so LAVA
 fetches a flat flash tarball over HTTP onto its worker and runs `qdl` there
 (`deploy: to: qdl` + `boot: method: qdl`, `storage: ufs`).
 
-Two jobs, mirroring the two local USB flash paths:
+Three jobs, mirroring the local USB flash paths:
 
-| Job YAML | `make` target it packages | Flashes | rootfs |
-|---|---|---|---|
-| `flash-lava.yaml` | `make flash-lava` | loader + kernel (LUNs 0,1,2,4; efi partition only on LUN 0) | ✗ |
-| `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all LUNs + patches) | ✓ |
+| Job YAML | `make` target it packages | Flashes | rootfs | Runs |
+|---|---|---|---|---|
+| `flash-lava.yaml` | `make flash-lava` | loader + kernel (LUNs 0,1,2,4; efi partition only on LUN 0) | ✗ | — |
+| `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all LUNs + patches) | ✓ | — |
+| `flash-lava-test.yaml` | `make flash-lava-test` | loader + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
 
 `flash-lava` = `flash-bootimage` + `flash-uki` combined; `flash-lava-yocto` = the
-LAVA counterpart of `flash-yocto`.
+LAVA counterpart of `flash-yocto`. `flash-lava-test` flashes the same loader +
+kernel as `flash-lava`, then runs the LAVA test-definitions suite against it
+remotely — see
+[Running the full test suite (flash-lava-test)](#running-the-full-test-suite-flash-lava-test)
+below.
 
 RB3 Gen2 uses **LUNs 0, 1, 2, 4** (there is no LUN 3 or 5), so the rawprogram
 list is shorter than on 6-LUN platforms.
@@ -286,10 +291,91 @@ Confirm the exact device-type string in your LAVA instance with the MCP
 `list_devices` (or the web UI). If it differs, update the `device_type:` line in
 each YAML and pass `FLASH_LAVA_DEVICE_TYPE=<name>` to `connect.sh`.
 
+## Running the full test suite (flash-lava-test)
+
+`flash-lava-test.yaml` flashes a board and then runs the complete
+test-definitions suite against it (`boot-handoff`, `remoteproc-smoke`,
+`fastrpc`, `optee-xtest`), unattended end to end.
+
+### Why ukify, not transfer_overlay
+
+kodiak's rootfs is an initramfs baked directly into the UKI (`efi.bin`), not
+a flashed partition — so LAVA's normal overlay injection, which only ever
+acts on an extracted `rootfs_image` file, has nothing to inject into.
+`transfer_overlay` (the usual fallback for a non-deployed rootfs) is also a
+dead end on this lab: its `http`/`nfs` paths need the DUT to get a DHCP
+lease (this lab's switch port doesn't hand one out), and its `zmodem` path
+needs a `uart` entry in the device dictionary (not set for
+`qcs6490-rb3gen2`).
+
+The fix: the job's first `deploy: to: downloads` action runs a
+`postprocess: docker` step that rebuilds the UKI with the LAVA test overlay
+(which LAVA stages into the downloads dir as `overlay-*.tar.gz`) merged into
+a copy of the initramfs, using the same `ukify`/`mkfs.fat`/`mcopy` recipe as
+the `uki` make target. It splices the rebuilt `efi.bin` back into a copy of
+the flash tarball at its original path, and the second `deploy: to: qdl`
+flashes *that* tarball. Everything downstream (qdl boot, minimal boot, test
+definitions) is identical to `flash-lava.yaml`.
+
+### Packaging and submitting
+
+`make flash-lava-test` packages **two** tarballs — the normal flash tarball
+(`kodiak-flash.qcomflash.tar.gz`, same as `flash-lava`) and a second
+`kodiak-ukify-ingredients.tar.gz` holding the inputs the postprocess step
+needs to rebuild the UKI (`Image` staged as `vmlinuz.efi`, the DTB,
+`rootfs.cpio.gz`, the UKI stub, and the UEFI fallback loader) — then hands
+both to `kodiak/lava/submit-test.sh`, which mints an upload URL and uploads
+each one separately, substitutes all four `<FLASH_URL>`/`<FLASH_TOKEN>`/
+`<INGREDIENTS_URL>`/`<INGREDIENTS_TOKEN>` placeholders, and submits +
+monitors the job. Unlike `flash-lava`/`flash-lava-yocto`, this job has no
+interactive mode: it runs the whole flash+boot+test-suite sequence
+headlessly, so there is nothing for `connect.sh` to attach to. To only build
+the tarballs without touching the lab: `make flash-lava-test-package`.
+Override the submitted definition with `FLASH_LAVA_TEST_JOB=`.
+
+### fastrpc TESTS: parameter
+
+The `fastrpc` test's `TESTS:` parameter is copied as-is from the
+hardware-validated `lemans` job (`"adsp:adsp:0:0 cdsp:cdsp:3:0"`). The format
+is `<case>:<remoteproc-name>:<domain>:<unsigned-pd>`, where `<domain>` is a
+fixed FastRPC domain enumeration constant (0 ADSP, 1 MDSP, 2 SDSP, 3 CDSP, 4
+CDSP1) — not a board-specific PAS/devicetree index — and `<remoteproc-name>`
+must match the kernel's `rproc->name` (the PAS driver's `sysmon_name`,
+"adsp"/"cdsp" for kodiak's `qcom,sc7280-{adsp,cdsp}-pas` compatibles). Both
+are confirmed correct for kodiak by reading the devicetree (`kodiak.dtsi`,
+`qcs6490-rb3gen2.dts`, `kodiak-el2.dtso`) and the PAS driver source
+(`qcom_q6v5_pas.c`). kodiak exposes more DSP nodes than lemans — cDSP1, sDSP,
+gDSP0, gDSP1 (see `kodiak/overlay/etc/init.d/S60fastrpc`) — only the
+adsp/cdsp pair both boards share is wired; extend `TESTS:` to the rest once
+their remoteproc names are confirmed on a live board. `modem`/`mpss` is
+intentionally out of scope (not supported on this open boot stack), matching
+`remoteproc-smoke.yaml`'s default `SKIP: "modem wpss"`.
+
 ## Validated on hardware
 
-Not yet validated end to end on a lab `qcs6490-rb3gen2` board. The job
-definitions and packaging mirror the hardware-validated `lemans` equivalents,
-adapted for RB3 Gen2's 4-LUN layout (0,1,2,4) and the loader + kernel file set
-(no SAIL / qupfw-slot patching). Run `make flash-lava` once a board is available
-and record the result here.
+**`flash-lava-test` — job 489920, device `rb3g2-05`, 2026-10-15: health
+`Complete`.** Flashing (ukify-rebuild-in-postprocess + qdl) and booting to a
+login prompt both succeeded for the first time on a lab `qcs6490-rb3gen2`
+board, confirming the UKI-overlay pattern ported from lemans works
+unchanged on kodiak. Per-suite results:
+
+| Suite | Result |
+|---|---|
+| `boot-handoff` | 6 pass, 2 skip |
+| `remoteproc-smoke` | 3 pass, 2 skip, 2 fail (`remoteproc-adsp-running`, `remoteproc-cdsp-running`) |
+| `fastrpc` | 2 fail (`fastrpc-adsp`, `fastrpc-cdsp`) |
+| `optee-xtest` | 122 pass |
+
+The `remoteproc-smoke`/`fastrpc` failures were **not** a devicetree or
+`TESTS:` parameter problem (both independently confirmed correct — see
+above). The job's kernel log shows the real cause: `request_firmware`
+failing with `-ENOENT` for `qcom/qcm6490/{adsp,cdsp}.mbn`, at exactly the
+paths the devicetree requests. The `rootfs.cpio.gz` packaged into that run's
+`kodiak-ukify-ingredients.tar.gz` was stale — built before the DSP firmware
+blobs were staged into the buildroot overlay, so it never had them baked in.
+Boot handoff and OP-TEE xtest are fully green, so the UKI/flash/boot
+pipeline itself is solid; a rebuild from a fresh rootfs (with firmware
+staged first) is expected to pass once resubmitted.
+
+`flash-lava`/`flash-lava-yocto` (flash-only, no test suite) remain not yet
+run on a lab board.

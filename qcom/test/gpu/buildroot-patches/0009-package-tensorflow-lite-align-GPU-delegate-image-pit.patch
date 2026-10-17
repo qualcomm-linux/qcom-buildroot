@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sun, 4 Oct 2026 14:26:54 -0400
+Subject: [PATCH 09/11] package/tensorflow-lite: align GPU delegate image pitch
+ in pixels
+
+With Mesa 25.2, RustiCL on freedreno a6xx offers
+cl_khr_image2d_from_buffer with a pitch alignment of 64 pixels, and
+the TensorFlow Lite GPU delegate switches to images on shared
+buffers. On Adreno it divides the reported alignment by the bytes per
+pixel (Qualcomm's driver reports bytes), so every such image gets a
+pitch RustiCL rejects and the delegate fails on the Adreno 623 and
+702 alike:
+
+  TfLiteGpuDelegate Init: Failed to create Image2D from Buffer
+  (clCreateImage): Invalid image descriptor
+
+Add a patch that aligns to the reported value in pixels, as the
+OpenCL specification defines it; that pitch satisfies a driver that
+means bytes too.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ ...ates-gpu-align-image-pitch-in-pixels.patch | 51 +++++++++++++++++++
+ 1 file changed, 51 insertions(+)
+ create mode 100644 package/tensorflow-lite/0007-lite-delegates-gpu-align-image-pitch-in-pixels.patch
+
+diff --git a/package/tensorflow-lite/0007-lite-delegates-gpu-align-image-pitch-in-pixels.patch b/package/tensorflow-lite/0007-lite-delegates-gpu-align-image-pitch-in-pixels.patch
+new file mode 100644
+index 0000000000..6622d84073
+--- /dev/null
++++ b/package/tensorflow-lite/0007-lite-delegates-gpu-align-image-pitch-in-pixels.patch
+@@ -0,0 +1,51 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Tyler Baker <tyler.baker@oss.qualcomm.com>
++Date: Sun, 4 Oct 2026 14:30:00 -0400
++Subject: [PATCH] lite/delegates/gpu: align image pitch in pixels
++
++CL_DEVICE_IMAGE_PITCH_ALIGNMENT is in pixels, but on Adreno the
++delegate divides it by the bytes per pixel, as Qualcomm's driver
++reports it in bytes. Mesa RustiCL reports pixels (64 on freedreno
++a6xx since Mesa 25.2), so the pitch of every image created from a
++shared buffer is too small and clCreateImage fails:
++
++  TfLiteGpuDelegate Init: Failed to create Image2D from Buffer
++  (clCreateImage): Invalid image descriptor
++
++Align to the reported value in pixels: a driver that means bytes is
++satisfied by that pitch too.
++
++Upstream: N/A, TensorFlow 2.11; the code is unchanged in TensorFlow
++master
++
++Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
++---
++--- a/tensorflow/lite/delegates/gpu/cl/inference_context.cc
+++++ b/tensorflow/lite/delegates/gpu/cl/inference_context.cc
++@@ -173,9 +173,8 @@
++       const size_t width = shape.b * shape.w;
++       const size_t height = shape.h * DivideRoundUp(shape.c, 4);
++       size_t width_pixel_alignment = gpu_info.opencl_info.image_pitch_alignment;
++-      if (gpu_info.IsAdreno() && width_pixel_alignment % bytes_per_pixel == 0) {
++-        width_pixel_alignment /= bytes_per_pixel;
++-      }
+++      // CL_DEVICE_IMAGE_PITCH_ALIGNMENT is in pixels. Aligning to that many
+++      // pixels also satisfies a driver that reports it in bytes.
++       const size_t width_aligned = AlignByN(width, width_pixel_alignment);
++       buffer_size = width_aligned * bytes_per_pixel * height;
++     } else {
++@@ -581,10 +580,8 @@
++                  : tensor_desc.GetBHWCShape().c);
++         size_t width_pixel_alignment =
++             gpu_info.opencl_info.image_pitch_alignment;
++-        if (gpu_info.IsAdreno() &&
++-            width_pixel_alignment % bytes_per_pixel == 0) {
++-          width_pixel_alignment /= bytes_per_pixel;
++-        }
+++        // CL_DEVICE_IMAGE_PITCH_ALIGNMENT is in pixels. Aligning to that many
+++        // pixels also satisfies a driver that reports it in bytes.
++         RETURN_IF_ERROR(CreateTensorSharedImage2DBuffer(
++             *context, shared_buffers_[buffer_index].GetMemoryPtr(), tensor_desc,
++             width_pixel_alignment, &shared_buffer_tensors_[tensor_index]));
++-- 
++2.43.0
+-- 
+2.47.3
+

@@ -1,0 +1,11 @@
+config BR2_PACKAGE_EGL_READBACK_EXT
+	bool "egl-readback"
+	depends on BR2_PACKAGE_HAS_LIBEGL
+	depends on BR2_PACKAGE_HAS_LIBGLES
+	depends on BR2_PACKAGE_HAS_LIBGBM
+	select BR2_PACKAGE_LIBDRM
+	help
+	  Headless GPU check: on the msm render node, renders through
+	  GBM, EGL and OpenGL ES 2 into an offscreen framebuffer, reads
+	  it back and checks the pixels, then times 500 frames. It exits
+	  0 only if the GPU drew the expected pixels.
