@@ -1250,7 +1250,7 @@ LAVA_QDL_RAWPROGRAM     = rawprogram0-only-kernel.xml rawprogram1.xml rawprogram
 		      rawprogram4.xml
 LAVA_QDL_RAMDUMP        = y
 LAVA_PROMPTS            = 'root@rb3gen2-core-kit' 'root@qcm6490' 'root@(.*):[/~]\#' \
-		      'root@buildroot' '\# '
+		      'root@buildroot' '\n\# '
 LAVA_TEST_FLASH_TARGET  = flash-lava-package
 LAVA_TEST_FLASH_TARBALL = $(FLASH_LAVA_TARBALL)
 LAVA_TEST_UKI_IMAGE     = $(LINUX_IMAGE)

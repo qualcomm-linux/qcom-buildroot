@@ -1239,7 +1239,7 @@ LAVA_QDL_STORAGE        = ufs
 LAVA_QDL_RAWPROGRAM     = rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml \
 		      rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml
 LAVA_QDL_RAMDUMP        = y
-LAVA_PROMPTS            = 'root@buildroot' 'root@(.*):[/~]\#' '\# '
+LAVA_PROMPTS            = 'root@buildroot' 'root@(.*):[/~]\#' '\n\# '
 LAVA_TEST_FLASH_TARGET  = flash-lava-package
 LAVA_TEST_FLASH_TARBALL = $(FLASH_LAVA_TARBALL)
 LAVA_TEST_UKI_IMAGE     = $(LINUX_IMAGE)
