@@ -13,12 +13,15 @@
 #               can narrow it to what its plan runs
 #
 # What each test needs on a BusyBox rootfs, from its script:
-#   boot-fingerprint, boot-handoff, cpu-features, kernel-health, maxcpus,
-#   memtest, remoteproc-smoke, remoteproc-restart
+#   boot-fingerprint, boot-handoff, kernel-health, maxcpus, memtest,
+#   remoteproc-smoke, remoteproc-restart
 #               nothing beyond BusyBox (kernel options and firmware come
 #               from the board)
 #   cpufreq-policy, cpu-hotplug
 #               stress-ng (the load phase; skipped without it)
+#   cpu-features
+#               idregs-arm64 (idregs_arm64_ext); without it the test builds
+#               it, which needs a compiler on the target, or skips
 #   fastrpc     fastrpc_test (fastrpc)
 #   optee-xtest xtest and tee-supplicant (optee_test_ext, optee_client_ext)
 #   alsa-dsp-restart
@@ -58,6 +61,10 @@ qcom-test = $(filter $(1),$(QCOM_TESTS))
 
 ifneq ($(call qcom-test,cpufreq-policy cpu-hotplug),)
 BR2_PACKAGE_STRESS_NG ?= y
+endif
+
+ifneq ($(call qcom-test,cpu-features),)
+BR2_PACKAGE_IDREGS_ARM64_EXT ?= y
 endif
 
 ifneq ($(call qcom-test,fastrpc inference),)

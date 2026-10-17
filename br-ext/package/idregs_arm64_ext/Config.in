@@ -1,0 +1,10 @@
+config BR2_PACKAGE_IDREGS_ARM64_EXT
+	bool "idregs-arm64"
+	depends on BR2_aarch64
+	help
+	  idregs-arm64 from test-definitions (cpu-features): reads the
+	  AArch64 ID registers from EL0 on every CPU, the KVM view of a
+	  vCPU, and exercises pointer authentication, SVE and SME. A
+	  static binary built against nolibc, so it needs no C library.
+
+	  https://github.com/Linaro/test-definitions
