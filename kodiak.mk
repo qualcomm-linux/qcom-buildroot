@@ -87,13 +87,10 @@ BR2_PACKAGE_OPENSSH_KEY_UTILS ?= y
 # OpenSSL CLI
 BR2_PACKAGE_LIBOPENSSL_BIN ?= y
 
-# stress-ng — CPU/thermal soak load generator. Drives the qcom-tests "CPU
-# stress" option for multi-hour stability runs; the runner falls back to a
-# busybox 'yes' busy-loop if this is ever disabled.
-BR2_PACKAGE_STRESS_NG ?= y
-
-# Qualcomm FastRPC test — validates the OP-TEE PAS coprocessor reset sequence
-BR2_PACKAGE_FASTRPC_EXT ?= y
+# The test packages come from qcom/test.mk (TEST=y, the default), for the
+# tests this board runs (lava/test-plan) and the qcom-tests runner. Add a
+# test here when the plan gains one.
+QCOM_TESTS ?= boot-handoff remoteproc-smoke fastrpc optee-xtest qcom-tests
 
 # QRTR userspace, required for the DSP subsystems to finish coming up:
 #   qrtr-ns   (QRTR_EXT)      — QMI name service / PD registry, launched by
@@ -119,27 +116,6 @@ BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV = y
 # eudev needs libblkid (from util-linux) for its blkid support.
 BR2_PACKAGE_UTIL_LINUX = y
 BR2_PACKAGE_UTIL_LINUX_LIBBLKID = y
-
-# Video codec validation. v4l-utils gives v4l2-ctl for capability/format
-# enumeration; GStreamer gives end-to-end encode and decode pipelines through
-# the venus V4L2 mem2mem codec (v4l2h264enc / v4l2h264dec), fed by
-# h264parse/h265parse (videoparsers) and qtdemux (isomp4). Needs C++ (already
-# on via the toolchain).
-BR2_INSTALL_LIBSTDCPP                            ?= y
-BR2_PACKAGE_LIBV4L                               ?= y
-BR2_PACKAGE_LIBV4L_UTILS                         ?= y
-BR2_PACKAGE_GSTREAMER1                           ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE                    ?= y
-# Base sub-plugins default off; videotestsrc feeds the encode test and
-# videoconvertscale (videoconvert) handles the NV12 conversion the encoder needs.
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOTESTSRC     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOCONVERTSCALE ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD                    ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2        ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2_PROBE  ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_ISOMP4      ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD                     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_VIDEOPARSERS ?= y
 
 # Root filesystem — compressed CPIO for use as initramfs
 BR2_TARGET_GENERIC_ISSUE     = "OP-TEE embedded distrib for $(PLATFORM)"
@@ -207,6 +183,7 @@ verify-blobs: verify-bootaa64 verify-qtiseclib
 
 include common.mk
 include toolchain.mk
+include qcom/test.mk
 
 # common.mk passes CFG_IN_TREE_EARLY_TAS to OP-TEE on the make command line,
 # which turns the platform target.mk's '+= qcom_pas/...' into a no-op. Append
@@ -272,6 +249,9 @@ help:
 	@echo "  flash-lava-yocto  Package the COMPLETE Yocto release (all LUNs +"
 	@echo "                 rootfs.img) for LAVA (kodiak/output/kodiak-yocto.qcomflash.tar.gz);"
 	@echo "                 the LAVA counterpart of flash-yocto (needs 'make yocto')"
+	@echo "  flash-lava-test  Flash a remote lab board via LAVA AND run the full"
+	@echo "                 test-definitions suite (boot-handoff, remoteproc-smoke,"
+	@echo "                 fastrpc, optee-xtest) against it — see kodiak/lava/README.md"
 	@echo ""
 	@echo "Firmware blob targets (alternative to 'make yocto')"
 	@echo "  fetch-blobs    Download QCM6490 firmware blobs directly — no Yocto build needed"
@@ -1252,6 +1232,35 @@ flash-lava-yocto-package:
 	@echo "        the LAVA MCP. Flash the full rawprogram*/patch* set."
 	@echo ""
 	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
+
+################################################################################
+# flash-lava-test: flash a lab board with this build and run the test plan
+# kodiak/lava/test-plan against it (qcom/lava/flash-lava-test.mk,
+# qcom/lava/README.md).
+#
+# The rootfs is the initramfs in the UKI (efi.bin), which LAVA's overlay
+# injection cannot reach, so the job rebuilds the UKI on the LAVA worker with
+# the test overlay appended to the initramfs (the same ukify/mkfs.fat/mcopy
+# recipe as 'uki'), puts it into a copy of the
+# flash-lava tarball and flashes that.
+################################################################################
+LAVA_DEVICE_TYPE        = qcs6490-rb3gen2
+LAVA_QDL_STORAGE        = ufs
+LAVA_QDL_RAWPROGRAM     = rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml \
+		      rawprogram4.xml
+LAVA_QDL_RAMDUMP        = y
+LAVA_PROMPTS            = 'root@rb3gen2-core-kit' 'root@qcm6490' 'root@(.*):[/~]\#' \
+		      'root@buildroot' '\n\# '
+LAVA_TEST_FLASH_TARGET  = flash-lava-package
+LAVA_TEST_FLASH_TARBALL = $(FLASH_LAVA_TARBALL)
+LAVA_TEST_UKI_IMAGE     = $(LINUX_IMAGE)
+LAVA_TEST_UKI_DTB       = $(LINUX_DTB)
+LAVA_TEST_UKI_INITRAMFS = $(BR_INITRAMFS)
+LAVA_TEST_UKI_STUB      = $(CURDIR)/kodiak/ukify/linuxaa64.efi.stub
+LAVA_TEST_UKI_BOOTAA64  = $(BOOTAA64_EFI)
+LAVA_TEST_UKI_CMDLINE   = $(LINUX_CMDLINE)
+
+include qcom/lava/flash-lava-test.mk
 
 yocto-clean:
 	rm -rf $(META_QCOM_DIR)

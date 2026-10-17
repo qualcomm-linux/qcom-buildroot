@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sat, 3 Oct 2026 14:00:39 -0400
+Subject: [PATCH 7/8] package/xnnpack: enable on AArch64
+
+XNNPACK is only available on x86, so TensorFlow Lite on AArch64 builds
+without it and runs its built-in kernels on the CPU, although XNNPACK
+has AArch64 kernels and is TensorFlow Lite's default CPU path there.
+
+Enable it on AArch64. This version's AArch64 fp16 kernels pass
+const xnn_float16 pointers (_Float16) to vld1q_dup_u16(), which takes
+const uint16_t pointers; GCC 14 makes that an error, so build with
+-Wno-error=incompatible-pointer-types.
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ package/xnnpack/Config.in  | 1 +
+ package/xnnpack/xnnpack.mk | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/package/xnnpack/Config.in b/package/xnnpack/Config.in
+index e4b92f61..d689df19 100644
+--- a/package/xnnpack/Config.in
++++ b/package/xnnpack/Config.in
+@@ -1,5 +1,6 @@
+ config BR2_PACKAGE_XNNPACK_ARCH_SUPPORTS
+ 	bool
++	default y if BR2_aarch64
+ 	default y if BR2_i386
+ 	default y if BR2_x86_64
+ 	depends on BR2_PACKAGE_CPUINFO_ARCH_SUPPORTS
+diff --git a/package/xnnpack/xnnpack.mk b/package/xnnpack/xnnpack.mk
+index bb53188f..840920d5 100644
+--- a/package/xnnpack/xnnpack.mk
++++ b/package/xnnpack/xnnpack.mk
+@@ -10,7 +10,10 @@ XNNPACK_LICENSE = BSD-3-Clause
+ XNNPACK_LICENSE_FILES = LICENSE
+ XNNPACK_INSTALL_STAGING = YES
+ XNNPACK_DEPENDENCIES = cpuinfo fp16 fxdiv pthreadpool
++# GCC 14 makes implicit pointer conversions an error; the AArch64 fp16
++# kernels of this version rely on them.
+ XNNPACK_CONF_OPTS = \
++	-DCMAKE_C_FLAGS="$(TARGET_CFLAGS) -Wno-error=incompatible-pointer-types" \
+ 	-DCPUINFO_SOURCE_DIR=$(STAGING_DIR)/usr \
+ 	-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+ 	-DXNNPACK_BUILD_TESTS=OFF \

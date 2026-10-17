@@ -1,0 +1,4 @@
+# From Buildroot's package/kvm-unit-tests/kvm-unit-tests.hash (master)
+sha256  0d3b588163064be2188b668abdebb4183ac211eab83d0a3cdc9a93f463686bc3  kvm-unit-tests-v2026-04-17.tar.bz2
+sha256  b3c9ca9e257f2eaae070cf0ccdf8770764f05a947a39a835e633413750a5777b  COPYRIGHT
+sha256  8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643  LICENSE

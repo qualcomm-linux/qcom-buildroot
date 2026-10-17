@@ -1,0 +1,9 @@
+config BR2_PACKAGE_TFLITE_RUN_EXT
+	bool "tflite-run"
+	depends on BR2_PACKAGE_TENSORFLOW_LITE
+	help
+	  Runs a TensorFlow Lite model on a list of raw input files,
+	  with the XNNPACK delegate on the CPU or the GPU delegate,
+	  and writes each output and the time of each inference, in
+	  the layout qnn-net-run uses (test-definitions
+	  automated/linux/inference).

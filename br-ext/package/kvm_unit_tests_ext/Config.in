@@ -1,0 +1,16 @@
+config BR2_PACKAGE_KVM_UNIT_TESTS_EXT
+	bool "kvm-unit-tests"
+	depends on BR2_aarch64
+	depends on BR2_USE_MMU # bash, kvmtool
+	depends on BR2_PACKAGE_BUSYBOX_SHOW_OTHERS # bash
+	depends on BR2_TOOLCHAIN_USES_GLIBC || BR2_TOOLCHAIN_USES_MUSL # kvmtool
+	depends on !BR2_STATIC_LIBS # kvmtool
+	select BR2_PACKAGE_BASH
+	select BR2_PACKAGE_KVMTOOL
+	help
+	  The KVM unit tests (tiny guests that check one KVM or
+	  virtual hardware feature each) built for kvmtool, with their
+	  runner, in /opt/kvm-unit-tests: run_tests.sh runs them
+	  against /dev/kvm. The runner and the run scripts are bash.
+
+	  https://gitlab.com/kvm-unit-tests/kvm-unit-tests

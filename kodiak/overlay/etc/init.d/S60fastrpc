@@ -42,31 +42,31 @@ run_all() {
 
     start_daemon "cDSP RPC daemon" \
         "/dev/fastrpc-cdsp /dev/fastrpc-cdsp-secure" \
-        /usr/bin/cdsprpcd
+        /usr/sbin/cdsprpcd
 
     start_daemon "cDSP1 RPC daemon" \
         "/dev/fastrpc-cdsp1 /dev/fastrpc-cdsp1-secure" \
-        /usr/bin/cdsprpcd rootpd cdsp1
+        /usr/sbin/cdsprpcd rootpd cdsp1
 
     start_daemon "aDSP RPC daemon" \
         "/dev/fastrpc-adsp /dev/fastrpc-adsp-secure" \
-        /usr/bin/adsprpcd
+        /usr/sbin/adsprpcd
 
     start_daemon "aDSP audio PD daemon" \
         "/dev/fastrpc-adsp /dev/fastrpc-adsp-secure" \
-        /usr/bin/adsprpcd audiopd
+        /usr/sbin/adsprpcd audiopd
 
     start_daemon "sDSP RPC daemon" \
         "/dev/fastrpc-sdsp /dev/fastrpc-sdsp-secure" \
-        /usr/bin/sdsprpcd
+        /usr/sbin/sdsprpcd
 
     start_daemon "gDSP0 RPC daemon" \
         "/dev/fastrpc-gdsp0 /dev/fastrpc-gdsp0-secure" \
-        /usr/bin/gdsprpcd rootpd gdsp0
+        /usr/sbin/gdsprpcd rootpd gdsp0
 
     start_daemon "gDSP1 RPC daemon" \
         "/dev/fastrpc-gdsp1 /dev/fastrpc-gdsp1-secure" \
-        /usr/bin/gdsprpcd rootpd gdsp1
+        /usr/sbin/gdsprpcd rootpd gdsp1
 }
 
 case "$1" in

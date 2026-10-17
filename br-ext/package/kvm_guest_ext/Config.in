@@ -1,0 +1,11 @@
+config BR2_PACKAGE_KVM_GUEST_EXT
+	bool "kvm-guest"
+	depends on BR2_aarch64
+	depends on BR2_PACKAGE_BUSYBOX
+	help
+	  A small Linux guest for KVM tests, in /opt/kvm-guest: a
+	  kernel built for a kvmtool or QEMU virtual machine (virtio
+	  console over PCI or MMIO, PSCI) and an initramfs with
+	  BusyBox. The guest's init prints a ready line with its CPU
+	  count, kernel release and uptime, then runs a shell on the
+	  console.

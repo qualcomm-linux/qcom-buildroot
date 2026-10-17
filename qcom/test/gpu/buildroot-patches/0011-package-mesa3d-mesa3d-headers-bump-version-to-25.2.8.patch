@@ -1,0 +1,154 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sun, 4 Oct 2026 10:28:28 -0400
+Subject: [PATCH 11/11] package/{mesa3d, mesa3d-headers}: bump version to
+ 25.2.8
+
+Mesa 25.2.8 is the last release of the 25.2 series, the series the
+Arduino UNO Q's own image ships (25.2.6) and the first one whose
+freedreno knows the Adreno 702. RustiCL from 25.1 fails on it:
+
+  fd_pipe_new2:49: unsupported GPU id 0x0 / chip id 0xb207000200
+
+25.2 removed the Gallium XA state tracker, so its option goes away
+(upstream commit 4cd4b2e1e6, "package/{mesa3d, mesa3d-headers}: bump
+version to 25.2.2", whose patch 0001 rebase this carries too); the
+25.2.3 to 25.2.7 bumps are version and hash changes only.
+
+Release notes:
+https://lists.freedesktop.org/archives/mesa-announce/2025-December/000830.html
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ package/mesa3d-headers/mesa3d-headers.mk               |  2 +-
+ ...-meson-option-to-disable-optional-neon-suppor.patch |  6 +++---
+ package/mesa3d/Config.in                               |  9 ---------
+ package/mesa3d/mesa3d.hash                             |  6 +++---
+ package/mesa3d/mesa3d.mk                               | 10 ++--------
+ 5 files changed, 9 insertions(+), 24 deletions(-)
+
+diff --git a/package/mesa3d-headers/mesa3d-headers.mk b/package/mesa3d-headers/mesa3d-headers.mk
+index 5cd05cc9ff..3076a8c99a 100644
+--- a/package/mesa3d-headers/mesa3d-headers.mk
++++ b/package/mesa3d-headers/mesa3d-headers.mk
+@@ -12,7 +12,7 @@ endif
+ 
+ # Not possible to directly refer to mesa3d variables, because of
+ # first/second expansion trickery...
+-MESA3D_HEADERS_VERSION = 25.1.8
++MESA3D_HEADERS_VERSION = 25.2.8
+ MESA3D_HEADERS_SOURCE = mesa-$(MESA3D_HEADERS_VERSION).tar.xz
+ MESA3D_HEADERS_SITE = https://archive.mesa3d.org
+ MESA3D_HEADERS_DL_SUBDIR = mesa3d
+diff --git a/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch b/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+index 04b33a7856..52e23e35da 100644
+--- a/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
++++ b/package/mesa3d/0001-vc4-add-meson-option-to-disable-optional-neon-suppor.patch
+@@ -10,7 +10,7 @@ to force disabling it at compile time.
+ Upstream: https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/4114
+ Signed-off-by: Peter Seiderer <ps.report@gmx.net>
+ Signed-off-by: Bernd Kuhls <bernd@kuhls.net>
+-[rebased for 20.2.0, 20.3.0, 21.1.0, 23.1.0, 23.2.0, 24.3.0 & 25.1.0]
++[rebased for 20.2.0, 20.3.0, 21.1.0, 23.1.0, 23.2.0, 24.3.0, 25.1.0 & 25.2.0]
+ Signed-off-by: Peter Seiderer <ps.report@gmx.net>
+ [fix syntax error after previous rebases]
+ ---
+@@ -23,8 +23,8 @@ diff --git a/meson.options b/meson.options
+ index 8e0bf2a..1cf0e07 100644
+ --- a/meson.options
+ +++ b/meson.options
+-@@ -117,6 +117,13 @@ option(
+-   description : 'enable gallium va frontend.',
++@@ -131,6 +131,13 @@ option(
++   description : 'enable gallium mediafoundation frontend tests.',
+  )
+  
+ +option(
+diff --git a/package/mesa3d/Config.in b/package/mesa3d/Config.in
+index fa6f60b22d..00fad359b4 100644
+--- a/package/mesa3d/Config.in
++++ b/package/mesa3d/Config.in
+@@ -102,12 +102,6 @@ config BR2_PACKAGE_MESA3D_DRIVER
+ 	bool
+ 	select BR2_PACKAGE_XLIB_LIBXSHMFENCE if BR2_PACKAGE_XORG7
+ 
+-# Gallium xa state tracker.
+-# Quote from mesa3d meson.build: "XA state tracker requires at least
+-# one of the following gallium drivers: nouveau, freedreno, i915, svga.
+-config BR2_PACKAGE_MESA3D_NEEDS_XA
+-	bool
+-
+ # OpenGL GLX and Gallium VDPAU both needs X11
+ config BR2_PACKAGE_MESA3D_NEEDS_X11
+ 	bool
+@@ -195,7 +189,6 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_NOUVEAU
+ 	bool "Gallium nouveau driver"
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+ 	select BR2_PACKAGE_LIBDRM_NOUVEAU
+-	select BR2_PACKAGE_MESA3D_NEEDS_XA
+ 	select BR2_PACKAGE_LLVM_RTTI if BR2_PACKAGE_MESA3D_LLVM
+ 	select BR2_PACKAGE_MESA3D_RUSTICL_SUPPORTED_DRIVER
+ 	help
+@@ -267,7 +260,6 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_SVGA
+ 	depends on BR2_i386 || BR2_x86_64
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+ 	select BR2_PACKAGE_LIBDRM_VMWGFX
+-	select BR2_PACKAGE_MESA3D_NEEDS_XA
+ 	help
+ 	  This is a virtual GPU driver for VMWare virtual machines.
+ 
+@@ -283,7 +275,6 @@ config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_TEGRA
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER
+ 	select BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_NOUVEAU
+ 	select BR2_PACKAGE_LIBDRM_NOUVEAU
+-	select BR2_PACKAGE_MESA3D_NEEDS_XA
+ 	help
+ 	  Adds support for Nvidia Tegra GPUs, requires nouveau.
+ 
+diff --git a/package/mesa3d/mesa3d.hash b/package/mesa3d/mesa3d.hash
+index a3858d398d..f55b2c4a1b 100644
+--- a/package/mesa3d/mesa3d.hash
++++ b/package/mesa3d/mesa3d.hash
+@@ -1,6 +1,6 @@
+-# From https://lists.freedesktop.org/archives/mesa-announce/2025-August/000817.html
+-sha256  5cf1571d0d646d90047f3d93f57acc787cf88ec7e95efe172c555b492c30fb71  mesa-25.1.8.tar.xz
+-sha512  98435d52a2855c71b15060785c225dc674b3565545a8581a5dd501605a04f9d597636282f1bce61e7a2e8ee98c31ecf7fbccab594571e31bc8b827e18e98aaa5  mesa-25.1.8.tar.xz
++# From https://lists.freedesktop.org/archives/mesa-announce/2025-December/000830.html
++sha256  097842f3e49d996868b38688db87b006f7d4541e93ce86d2f341d8b3e7be7c93  mesa-25.2.8.tar.xz
++sha512  a238965ee235bd9178d26b210fc3996b77927dab31964b76cd1e1e72cfffbefbd96e4a57ec4f5018205a58354cd41d6cf99bbc712b275a7518710a34511dfb13  mesa-25.2.8.tar.xz
+ # License
+ sha256  0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615  docs/license.rst
+ sha256  323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f  licenses/MIT
+diff --git a/package/mesa3d/mesa3d.mk b/package/mesa3d/mesa3d.mk
+index da6d135e19..fc0db1e737 100644
+--- a/package/mesa3d/mesa3d.mk
++++ b/package/mesa3d/mesa3d.mk
+@@ -5,7 +5,7 @@
+ ################################################################################
+ 
+ # When updating the version, please also update mesa3d-headers
+-MESA3D_VERSION = 25.1.8
++MESA3D_VERSION = 25.2.8
+ MESA3D_SOURCE = mesa-$(MESA3D_VERSION).tar.xz
+ MESA3D_SITE = https://archive.mesa3d.org
+ MESA3D_LICENSE = MIT, SGI, Khronos
+@@ -92,15 +92,9 @@ ifeq ($(BR2_PACKAGE_MESA3D_OPENGL_GLX),y)
+ MESA3D_CONF_OPTS += \
+ 	-Dglx=dri \
+ 	-Dglx-direct=true
+-ifeq ($(BR2_PACKAGE_MESA3D_NEEDS_XA),y)
+-MESA3D_CONF_OPTS += -Dgallium-xa=enabled
+-else
+-MESA3D_CONF_OPTS += -Dgallium-xa=disabled
+-endif
+ else
+ MESA3D_CONF_OPTS += \
+-	-Dglx=disabled \
+-	-Dgallium-xa=disabled
++	-Dglx=disabled
+ endif
+ 
+ ifeq ($(BR2_ARM_CPU_HAS_NEON),y)
+-- 
+2.47.3
+

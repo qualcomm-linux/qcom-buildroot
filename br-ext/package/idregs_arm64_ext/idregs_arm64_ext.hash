@@ -1,0 +1,4 @@
+# Locally computed
+sha256  dc9de229d57dbbb6899ce6b299907f89afc4ac9c3075c8c63423266effe85e8e  idregs_arm64_ext-4ddcfe81845497eb602d458dbe9a3066eb5e56b5-git4.tar.gz
+# From https://cdn.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
+sha256  9df30b02dd8102bbd0be52556288ef6889ddbe7f1ddb96fbf847d0becf3eacac  linux-6.18.54.tar.xz

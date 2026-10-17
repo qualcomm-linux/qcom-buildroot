@@ -102,15 +102,10 @@ BR2_PACKAGE_OPENSSH_KEY_UTILS ?= y
 # OpenSSL CLI
 BR2_PACKAGE_LIBOPENSSL_BIN ?= y
 
-# stress-ng — CPU/thermal soak load generator. Drives the qcom-tests "CPU
-# stress" option for multi-hour stability runs; the runner falls back to a
-# busybox 'yes' busy-loop if this is ever disabled.
-BR2_PACKAGE_STRESS_NG ?= y
-
-# Qualcomm FastRPC test — validates the OP-TEE PAS coprocessor reset sequence.
-# NOTE: upstream ships DSP skel stubs for v68/v75 only; the SA8775P CDSP is v73,
-# so the bundled calculator workload may have no matching skel at runtime.
-BR2_PACKAGE_FASTRPC_EXT ?= y
+# The test packages come from qcom/test.mk (TEST=y, the default), for the
+# tests this board runs (lava/test-plan) and the qcom-tests runner. Add a
+# test here when the plan gains one.
+QCOM_TESTS ?= boot-handoff remoteproc-smoke fastrpc optee-xtest qcom-tests
 
 # QRTR userspace (libqrtr + qrtr-ns). qrtr-ns is the QMI name service the DSP
 # subsystems need to register their servreg protection domains; without it the
@@ -123,27 +118,6 @@ BR2_PACKAGE_QRTR_EXT ?= y
 # fastrpc glink channel opens but the DSP never posts RX intents. Launched
 # from an init script after qrtr-ns.
 BR2_PACKAGE_TQFTPSERV_EXT ?= y
-
-# Video decoder validation. v4l-utils gives v4l2-ctl for capability/format
-# enumeration; GStreamer gives an end-to-end decode pipeline. The iris/venus
-# codec is a V4L2 *stateful* decoder, so the elements are v4l2h264dec /
-# v4l2h265dec (registered by the m2m probe), fed by h264parse/h265parse
-# (videoparsers) and qtdemux (isomp4). Needs C++ (already on via the toolchain).
-BR2_INSTALL_LIBSTDCPP                            ?= y
-BR2_PACKAGE_LIBV4L                               ?= y
-BR2_PACKAGE_LIBV4L_UTILS                         ?= y
-BR2_PACKAGE_GSTREAMER1                           ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE                    ?= y
-# Base sub-plugins default off; videotestsrc feeds the encode test and
-# videoconvertscale (videoconvert) handles the NV12 conversion the encoder needs.
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOTESTSRC     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BASE_PLUGIN_VIDEOCONVERTSCALE ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD                    ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2        ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_V4L2_PROBE  ?= y
-BR2_PACKAGE_GST1_PLUGINS_GOOD_PLUGIN_ISOMP4      ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD                     ?= y
-BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_VIDEOPARSERS ?= y
 
 # Root filesystem — compressed CPIO for use as initramfs
 BR2_TARGET_GENERIC_ISSUE     = "OP-TEE embedded distrib for $(PLATFORM)"
@@ -237,6 +211,7 @@ BOOTAA64_EFI = $(CURDIR)/lemans/input/bootaa64.efi
 
 include common.mk
 include toolchain.mk
+include qcom/test.mk
 
 # common.mk passes CFG_IN_TREE_EARLY_TAS to OP-TEE on the make command line,
 # which turns the platform target.mk's '+= qcom_pas/...' into a no-op. Append
@@ -1249,62 +1224,32 @@ flash-lava-yocto-package:
 	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
 
 ################################################################################
-# flash-lava-test — Flash + run the full LAVA test-definitions suite remotely.
+# flash-lava-test: flash a lab board with this build and run the test plan
+# lemans/lava/test-plan against it (qcom/lava/flash-lava-test.mk,
+# qcom/lava/README.md).
 #
-# flash-lava only confirms the board boots to a login prompt; this target goes
-# further and runs the actual test suite (boot-handoff, remoteproc-smoke,
-# fastrpc, optee-xtest) against a real board via lemans/lava/flash-lava-test.yaml.
-#
-# lemans's rootfs is an initramfs baked into the UKI (efi.bin), not a flashed
-# partition — so LAVA's normal overlay injection (which only ever acts on an
-# extracted rootfs_image file) can never reach it, and lava-test-shell has
-# nowhere to unpack its overlay. The fix: the job rebuilds the UKI itself,
-# with the LAVA test overlay merged into the initramfs, inside a
-# 'deploy: to: downloads' 'postprocess: docker' step — using the exact same
-# ukify/mkfs.fat/mcopy recipe as the 'efi' target above — before the real
-# 'deploy: to: qdl' flashes the result. See lemans/lava/README.md.
-#
-# This target packages a second tarball alongside flash-lava's: the raw
-# ingredients ukify needs (kernel, dtb, initramfs, stub, UEFI fallback loader)
-# bundled together, so the job's postprocess step can rebuild efi.bin on the
-# LAVA worker instead of shipping a prebuilt one that can't carry the overlay.
-LAVA_TEST_INGREDIENTS_DIR     = $(CURDIR)/lemans/output/flash-lava-test-ingredients
-LAVA_TEST_INGREDIENTS_TARBALL = $(CURDIR)/lemans/output/lemans-ukify-ingredients.tar.gz
-FLASH_LAVA_TEST_JOB          ?= $(CURDIR)/lemans/lava/flash-lava-test.yaml
+# The rootfs is the initramfs in the UKI (efi.bin), which LAVA's overlay
+# injection cannot reach, so the job rebuilds the UKI on the LAVA worker with
+# the test overlay appended to the initramfs (the same ukify/mkfs.fat/mcopy
+# recipe as 'uki'), puts it into a copy of the
+# flash-lava tarball and flashes that.
+################################################################################
+LAVA_DEVICE_TYPE        = lemans-evk
+LAVA_QDL_STORAGE        = ufs
+LAVA_QDL_RAWPROGRAM     = rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml \
+		      rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml
+LAVA_QDL_RAMDUMP        = y
+LAVA_PROMPTS            = 'root@buildroot' 'root@(.*):[/~]\#' '\n\# '
+LAVA_TEST_FLASH_TARGET  = flash-lava-package
+LAVA_TEST_FLASH_TARBALL = $(FLASH_LAVA_TARBALL)
+LAVA_TEST_UKI_IMAGE     = $(LINUX_IMAGE)
+LAVA_TEST_UKI_DTB       = $(LINUX_DTB)
+LAVA_TEST_UKI_INITRAMFS = $(BR_INITRAMFS)
+LAVA_TEST_UKI_STUB      = $(CURDIR)/lemans/ukify/linuxaa64.efi.stub
+LAVA_TEST_UKI_BOOTAA64  = $(BOOTAA64_EFI)
+LAVA_TEST_UKI_CMDLINE   = $(LINUX_CMDLINE)
 
-.PHONY: flash-lava-test flash-lava-test-package
-
-# Like flash-lava: package both tarballs, then upload + submit + monitor via
-# lemans/lava/submit-test.sh (a two-artifact variant of submit.sh — this job
-# has no console to attach to, so there is no interactive mode). Run
-# flash-lava-test-package alone to only package.
-flash-lava-test: flash-lava-test-package
-	$(CURDIR)/lemans/lava/submit-test.sh $(FLASH_LAVA_TARBALL) $(LAVA_TEST_INGREDIENTS_TARBALL) $(FLASH_LAVA_TEST_JOB)
-
-# Depends on flash-lava-package: reuses the same lemans-flash.qcomflash.tar.gz
-# (the job's postprocess splices its rebuilt efi.bin back into a copy of it),
-# and flash-lava-package's own prerequisites guarantee LINUX_IMAGE / LINUX_DTB
-# / BR_INITRAMFS (from the 'efi' target, above) already exist.
-flash-lava-test-package: flash-lava-package
-	rm -rf $(LAVA_TEST_INGREDIENTS_DIR)
-	@mkdir -p $(LAVA_TEST_INGREDIENTS_DIR)
-	@for pair in "$(LINUX_IMAGE):vmlinuz.efi" "$(LINUX_DTB):lemans-evk-el2.dtb" \
-	             "$(BR_INITRAMFS):rootfs.cpio.gz" \
-	             "$(CURDIR)/lemans/ukify/linuxaa64.efi.stub:linuxaa64.efi.stub" \
-	             "$(BOOTAA64_EFI):bootaa64.efi"; do \
-		src="$${pair%%:*}"; dst="$${pair##*:}"; \
-		if [ ! -f "$$src" ]; then echo "ERROR: $$src not found"; exit 1; fi; \
-		cp -f "$$src" "$(LAVA_TEST_INGREDIENTS_DIR)/$$dst"; \
-	done
-	tar -czf $(LAVA_TEST_INGREDIENTS_TARBALL) -C $(LAVA_TEST_INGREDIENTS_DIR) .
-	@echo ""
-	@echo "LAVA ukify-ingredients tarball assembled: $(LAVA_TEST_INGREDIENTS_TARBALL)"
-	@echo "  Contents (flat): vmlinuz.efi, lemans-evk-el2.dtb, rootfs.cpio.gz,"
-	@echo "                   linuxaa64.efi.stub, bootaa64.efi"
-	@echo ""
-	@echo "  Next: upload both this and $(FLASH_LAVA_TARBALL) to lab-reachable URLs"
-	@echo "        and submit lemans/lava/flash-lava-test.yaml — e.g. via"
-	@echo "        lemans/lava/submit-test.sh, or 'make flash-lava-test'."
+include qcom/lava/flash-lava-test.mk
 
 ################################################################################
 # flash-sail — Flash the SAIL (safety-island) NOR image.
@@ -1653,7 +1598,7 @@ $(BLOBS_STAMP):
 
 fetch-blobs-clean:
 	@# Remove only generated staging — NOT $(OVERLAY_DIR) itself, which also
-	@# holds version-controlled overlay files (etc/init.d/*, usr/bin/qcom-tests).
+	@# holds version-controlled overlay files (etc/init.d/*).
 	rm -rf $(BLOBS_DIR) $(FW_DEST_DIR) $(FW_VPU_DEST) $(DSP_SHARE_DIR)
 
 ################################################################################

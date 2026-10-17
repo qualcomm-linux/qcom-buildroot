@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@oss.qualcomm.com>
+Date: Sun, 4 Oct 2026 10:28:28 -0400
+Subject: [PATCH 10/11] package/rust-bindgen: bump version to 0.72.0
+
+Mesa 25.2 needs bindgen 0.71.1 or newer to build RustiCL:
+
+  Mesa requires bindgen 0.71.1 or newer.
+
+Backport of upstream commits 1a229c54b8 ("package/rust-bindgen:
+security bump version to 0.72.0") and 34ed3bbf0a
+("package/rust-bindgen: add runtime host-clang dependency").
+
+Signed-off-by: Tyler Baker <tyler.baker@oss.qualcomm.com>
+---
+ package/rust-bindgen/rust-bindgen.hash | 2 +-
+ package/rust-bindgen/rust-bindgen.mk   | 7 ++++++-
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/package/rust-bindgen/rust-bindgen.hash b/package/rust-bindgen/rust-bindgen.hash
+index 0718bdc696..dc79a62ddd 100644
+--- a/package/rust-bindgen/rust-bindgen.hash
++++ b/package/rust-bindgen/rust-bindgen.hash
+@@ -1,3 +1,3 @@
+ # Locally calculated
+-sha256  20d32e8e182ef49694a65a4a18d624cac7caa30b03422212d503a7edc0d04f6a  rust-bindgen-0.65.1-cargo4.tar.gz
++sha256  f131b9cf87ea0a5db33ff3ad711aec4dbc4d383536f5f2e37493d63cbe95428e  rust-bindgen-0.72.0-cargo4.tar.gz
+ sha256  c23953d9deb0a3312dbeaf6c128a657f3591acee45067612fa68405eaa4525db  LICENSE
+diff --git a/package/rust-bindgen/rust-bindgen.mk b/package/rust-bindgen/rust-bindgen.mk
+index aa0d7d44a4..8c02db557f 100644
+--- a/package/rust-bindgen/rust-bindgen.mk
++++ b/package/rust-bindgen/rust-bindgen.mk
+@@ -4,11 +4,16 @@
+ #
+ ################################################################################
+ 
+-RUST_BINDGEN_VERSION = 0.65.1
++RUST_BINDGEN_VERSION = 0.72.0
+ RUST_BINDGEN_SITE = $(call github,rust-lang,rust-bindgen,v$(RUST_BINDGEN_VERSION))
+ RUST_BINDGEN_LICENSE = BSD-3-clause
+ RUST_BINDGEN_LICENSE_FILES = LICENSE
+ 
++# This is actually a runtime dependency (bindgen loads libclang at
++# runtime), but as it's a host package, we have no other option but to
++# handle it as a build dependency.
++HOST_RUST_BINDGEN_DEPENDENCIES = host-clang
++
+ # The Cargo.toml at the root directory is a "virtual manifest".
+ # Since we only want to build and install bindgen use the Cargo.toml
+ # from the bindgen-cli subdirectory.
+-- 
+2.47.3
+

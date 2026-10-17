@@ -1,0 +1,11 @@
+#!/bin/sh
+# init of the KVM test guest: mount the kernel file systems, print the ready
+# line, then run a shell on the console (the test sends commands to it and
+# ends with poweroff -f).
+/bin/busybox mount -t proc proc /proc
+/bin/busybox --install -s /bin
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+echo "kvm-guest: ready vcpus=$(nproc) online=$(cat /sys/devices/system/cpu/online)" \
+	"kernel=$(uname -r) uptime=$(cut -d ' ' -f 1 /proc/uptime)"
+exec sh
