@@ -12,7 +12,7 @@ Three jobs:
 |---|---|---|---|---|
 | `flash-lava.yaml` | `make flash-lava` | boot chain + kernel (LUNs 0–5, rootfs stripped) | ✗ | — |
 | `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all 6 LUNs + patches) | ✓ | — |
-| `flash-lava-test.yaml` | `make flash-lava-test` | boot chain + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
+| generated from `test-plan` | `make flash-lava-test` | boot chain + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
 
 `flash-lava` = `flash-bootimage` + `flash-uki` combined; `flash-lava-yocto` =
 the LAVA counterpart of `flash-yocto`. `flash-lava-test` flashes the same
@@ -282,9 +282,13 @@ accordingly, or drop the final `boot` action for a flash-only job.
 
 ## Running the full test suite (flash-lava-test)
 
-`flash-lava-test.yaml` flashes a board and then runs the complete
-test-definitions suite against it (`boot-handoff`, `remoteproc-smoke`,
-`fastrpc`, `optee-xtest`), unattended end to end.
+`make flash-lava-test` flashes a board and then runs the test plan
+`lemans/lava/test-plan` against it (`boot-handoff`, `remoteproc-smoke`,
+`fastrpc`, `optee-xtest`), unattended end to end. The job, the packaging
+and the submission are shared by every board: see
+[qcom/lava/README.md](../../qcom/lava/README.md). lemans.mk sets the board
+variables (device type, qdl files, prompts, UKI ingredients) and uses the
+`initramfs` overlay described below.
 
 ### Why ukify, not transfer_overlay
 
@@ -308,19 +312,18 @@ definitions) is identical to `flash-lava.yaml`.
 
 ### Packaging and submitting
 
-`make flash-lava-test` packages **two** tarballs — the normal flash tarball
-(`lemans-flash.qcomflash.tar.gz`, same as `flash-lava`) and a second
-`lemans-ukify-ingredients.tar.gz` holding the inputs the postprocess step
-needs to rebuild the UKI (`vmlinuz.efi`, the DTB, `rootfs.cpio.gz`, the UKI
-stub, and the UEFI fallback loader) — then hands both to
-`lemans/lava/submit-test.sh`, which mints an upload URL and uploads each one
-separately, substitutes all four `<FLASH_URL>`/`<FLASH_TOKEN>`/
-`<INGREDIENTS_URL>`/`<INGREDIENTS_TOKEN>` placeholders, and submits +
-monitors the job. Unlike `flash-lava`/`flash-lava-yocto`, this job has no
-interactive mode: it runs the whole flash+boot+test-suite sequence
-headlessly, so there is nothing for `connect.sh` to attach to. To only build
-the tarballs without touching the lab: `make flash-lava-test-package`.
-Override the submitted definition with `FLASH_LAVA_TEST_JOB=`.
+`make flash-lava-test` packages **two** tarballs: the normal flash tarball
+(`lemans-flash.qcomflash.tar.gz`, same as `flash-lava`) and
+`lemans-ukify-ingredients.tar.gz` with the inputs the postprocess step needs to
+rebuild the UKI (the kernel as `vmlinuz.efi`, the DTB, `rootfs.cpio.gz`, the
+UKI stub and the UEFI fallback loader). It writes the job to
+`lemans/output/lemans-flash-lava-test.yaml` and hands it with both tarballs to
+`qcom/lava/submit-test.sh`, which uploads each one, fills in their URLs and
+the names of the LAVA remote artifact tokens (so the job is public), and
+submits and follows the job. This job has no interactive mode. To only build
+the tarballs: `make flash-lava-test-package`; to only write the job: `make
+flash-lava-test-job`. `LAVA_TEST_REPO` and `LAVA_TEST_BRANCH` select the
+test-definitions repository and branch.
 
 ## Validated on hardware
 
@@ -329,5 +332,5 @@ All three definitions have been run end to end on a lab `lemans-evk` board:
 - `flash-lava.yaml`       — flashed all 6 LUNs and booted to a login prompt.
 - `flash-lava-yocto.yaml` — `health: Complete`: flashed all 6 LUNs incl. the
   ~924 MB rootfs, booted, and auto-login succeeded.
-- `flash-lava-test.yaml`  — `health: Complete`: 188/188 test cases
+- `flash-lava-test`: `health: Complete`: 188/188 test cases
   pass/skip, 0 fail, across all four test-definitions suites.

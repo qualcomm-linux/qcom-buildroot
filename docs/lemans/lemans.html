@@ -1524,10 +1524,10 @@ pd_ignore_unused</pre>
       tarballs — the normal flash tarball and a
       <code>lemans-ukify-ingredients.tar.gz</code> (kernel, DTB,
       <code>rootfs.cpio.gz</code>, UKI stub, UEFI fallback loader) — uploads
-      both, submits <code>flash-lava-test.yaml</code>, and monitors it via
-      <code>lemans/lava/submit-test.sh</code> (a two-artifact, non-interactive
-      variant of <code>submit.sh</code> — this job has no console to attach
-      to). Runs <code>boot-handoff</code>, <code>remoteproc-smoke</code>,
+      both, writes the job from the plan
+      <code>lemans/lava/test-plan</code>, submits it and follows it with the
+      shared <code>qcom/lava</code> scripts (see <code>qcom/lava/README.md</code>;
+      the job is public and has no console to attach to). Runs <code>boot-handoff</code>, <code>remoteproc-smoke</code>,
       <code>fastrpc</code>, and <code>optee-xtest</code>. Validated on
       hardware: <code>health: Complete</code>, 188/188 test cases pass/skip,
       0 fail.

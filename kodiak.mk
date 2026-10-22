@@ -1234,57 +1234,33 @@ flash-lava-yocto-package:
 	@echo "  Includes rootfs.img, so a job may boot to a login prompt on a bare board."
 
 ################################################################################
-# flash-lava-test — Flash + run the full LAVA test-definitions suite remotely.
+# flash-lava-test: flash a lab board with this build and run the test plan
+# kodiak/lava/test-plan against it (qcom/lava/flash-lava-test.mk,
+# qcom/lava/README.md).
 #
-# flash-lava only confirms the board boots to a login prompt; this target goes
-# further and runs the actual test suite (boot-handoff, remoteproc-smoke,
-# fastrpc, optee-xtest) against a real board via kodiak/lava/flash-lava-test.yaml.
-#
-# kodiak's rootfs is an initramfs baked into the UKI (efi.bin), not a flashed
-# partition — so LAVA's normal overlay injection (which only ever acts on an
-# extracted rootfs_image file) can never reach it, and lava-test-shell has
-# nowhere to unpack its overlay. The fix: the job rebuilds the UKI itself,
-# with the LAVA test overlay merged into the initramfs, inside a
-# 'deploy: to: downloads' 'postprocess: docker' step — using the exact same
-# ukify/mkfs.fat/mcopy recipe as the 'uki' target above — before the real
-# 'deploy: to: qdl' flashes the result. See kodiak/lava/README.md.
-LAVA_TEST_INGREDIENTS_DIR     = $(CURDIR)/kodiak/output/flash-lava-test-ingredients
-LAVA_TEST_INGREDIENTS_TARBALL = $(CURDIR)/kodiak/output/kodiak-ukify-ingredients.tar.gz
-FLASH_LAVA_TEST_JOB          ?= $(CURDIR)/kodiak/lava/flash-lava-test.yaml
+# The rootfs is the initramfs in the UKI (efi.bin), which LAVA's overlay
+# injection cannot reach, so the job rebuilds the UKI on the LAVA worker with
+# the test overlay appended to the initramfs (the same ukify/mkfs.fat/mcopy
+# recipe as 'uki'), puts it into a copy of the
+# flash-lava tarball and flashes that.
+################################################################################
+LAVA_DEVICE_TYPE        = qcs6490-rb3gen2
+LAVA_QDL_STORAGE        = ufs
+LAVA_QDL_RAWPROGRAM     = rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml \
+		      rawprogram4.xml
+LAVA_QDL_RAMDUMP        = y
+LAVA_PROMPTS            = 'root@rb3gen2-core-kit' 'root@qcm6490' 'root@(.*):[/~]\#' \
+		      'root@buildroot' '\n\# '
+LAVA_TEST_FLASH_TARGET  = flash-lava-package
+LAVA_TEST_FLASH_TARBALL = $(FLASH_LAVA_TARBALL)
+LAVA_TEST_UKI_IMAGE     = $(LINUX_IMAGE)
+LAVA_TEST_UKI_DTB       = $(LINUX_DTB)
+LAVA_TEST_UKI_INITRAMFS = $(BR_INITRAMFS)
+LAVA_TEST_UKI_STUB      = $(CURDIR)/kodiak/ukify/linuxaa64.efi.stub
+LAVA_TEST_UKI_BOOTAA64  = $(BOOTAA64_EFI)
+LAVA_TEST_UKI_CMDLINE   = $(LINUX_CMDLINE)
 
-.PHONY: flash-lava-test flash-lava-test-package
-
-# Like flash-lava: package both tarballs, then upload + submit + monitor via
-# kodiak/lava/submit-test.sh (a two-artifact variant of submit.sh — this job
-# has no console to attach to, so there is no interactive mode). Run
-# flash-lava-test-package alone to only package.
-flash-lava-test: flash-lava-test-package
-	$(CURDIR)/kodiak/lava/submit-test.sh $(FLASH_LAVA_TARBALL) $(LAVA_TEST_INGREDIENTS_TARBALL) $(FLASH_LAVA_TEST_JOB)
-
-# Depends on flash-lava-package: reuses the same kodiak-flash.qcomflash.tar.gz
-# (the job's postprocess splices its rebuilt efi.bin back into a copy of it),
-# and flash-lava-package's own prerequisites guarantee LINUX_IMAGE / LINUX_DTB
-# / BR_INITRAMFS (from the 'uki' target, above) already exist.
-flash-lava-test-package: flash-lava-package
-	rm -rf $(LAVA_TEST_INGREDIENTS_DIR)
-	@mkdir -p $(LAVA_TEST_INGREDIENTS_DIR)
-	@for pair in "$(LINUX_IMAGE):vmlinuz.efi" "$(LINUX_DTB):qcs6490-rb3gen2-el2.dtb" \
-	             "$(BR_INITRAMFS):rootfs.cpio.gz" \
-	             "$(CURDIR)/kodiak/ukify/linuxaa64.efi.stub:linuxaa64.efi.stub" \
-	             "$(BOOTAA64_EFI):bootaa64.efi"; do \
-		src="$${pair%%:*}"; dst="$${pair##*:}"; \
-		if [ ! -f "$$src" ]; then echo "ERROR: $$src not found"; exit 1; fi; \
-		cp -f "$$src" "$(LAVA_TEST_INGREDIENTS_DIR)/$$dst"; \
-	done
-	tar -czf $(LAVA_TEST_INGREDIENTS_TARBALL) -C $(LAVA_TEST_INGREDIENTS_DIR) .
-	@echo ""
-	@echo "LAVA ukify-ingredients tarball assembled: $(LAVA_TEST_INGREDIENTS_TARBALL)"
-	@echo "  Contents (flat): vmlinuz.efi, qcs6490-rb3gen2-el2.dtb, rootfs.cpio.gz,"
-	@echo "                   linuxaa64.efi.stub, bootaa64.efi"
-	@echo ""
-	@echo "  Next: upload both this and $(FLASH_LAVA_TARBALL) to lab-reachable URLs"
-	@echo "        and submit kodiak/lava/flash-lava-test.yaml — e.g. via"
-	@echo "        kodiak/lava/submit-test.sh, or 'make flash-lava-test'."
+include qcom/lava/flash-lava-test.mk
 
 yocto-clean:
 	rm -rf $(META_QCOM_DIR)
