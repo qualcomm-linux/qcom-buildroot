@@ -102,6 +102,12 @@ BR2_PACKAGE_OPENSSH_KEY_UTILS ?= y
 # OpenSSL CLI
 BR2_PACKAGE_LIBOPENSSL_BIN ?= y
 
+# TPM2 userspace test suite — tpm2-tools (tpm2_getcap, tpm2_selftest,
+# tpm2_pcrread, ...) over the in-kernel resource manager, to exercise the
+# discrete TPM this branch brings up at /dev/tpm0 (features/lemans/security/
+# dtpm). tpm2-tools pulls in tpm2-tss and its deps.
+BR2_PACKAGE_TPM2_TOOLS ?= y
+
 # The test packages come from qcom/test.mk (TEST=y; the default is n), for
 # the tests this board runs (lava/test-plan). Add a test here when the plan
 # gains one.
