@@ -111,7 +111,7 @@ BR2_PACKAGE_TPM2_TOOLS ?= y
 # The test packages come from qcom/test.mk (TEST=y; the default is n), for
 # the tests this board runs (lava/test-plan). Add a test here when the plan
 # gains one.
-QCOM_TESTS ?= boot-handoff remoteproc-smoke fastrpc optee-xtest
+QCOM_TESTS ?= boot-handoff remoteproc-smoke fastrpc optee-xtest tpm
 
 # QRTR userspace (libqrtr + qrtr-ns). qrtr-ns is the QMI name service the DSP
 # subsystems need to register their servreg protection domains; without it the

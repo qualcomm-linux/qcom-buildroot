@@ -26,6 +26,9 @@
 #               it, which needs a compiler on the target, or skips
 #   fastrpc     fastrpc_test (fastrpc)
 #   optee-xtest xtest and tee-supplicant (optee_test_ext, optee_client_ext)
+#   tpm         tpm2-tools (tpm2_getcap, tpm2_selftest, tpm2_pcrread), to
+#               exercise a discrete TPM at /dev/tpm0 over the in-kernel
+#               resource manager (lemans features/lemans/security/dtpm)
 #   alsa-dsp-restart
 #               aplay and amixer (alsa-utils)
 #   memtester   memtester
@@ -54,7 +57,7 @@ QCOM_TESTS_ALL = boot-fingerprint boot-handoff cpu-features cpu-hotplug \
 		 cpufreq-policy kernel-health maxcpus memtest remoteproc-smoke \
 		 remoteproc-restart fastrpc optee-xtest alsa-dsp-restart \
 		 memtester kvm-unit-tests kvm-guest gpu-render \
-		 video-codec inference
+		 video-codec inference tpm
 QCOM_TESTS ?= $(QCOM_TESTS_ALL)
 
 # qcom-test <test>...: non-empty if QCOM_TESTS names any of them
@@ -100,6 +103,10 @@ endif
 
 ifneq ($(call qcom-test,optee-xtest),)
 BR2_PACKAGE_OPTEE_TEST_EXT ?= y
+endif
+
+ifneq ($(call qcom-test,tpm),)
+BR2_PACKAGE_TPM2_TOOLS ?= y
 endif
 
 ifneq ($(call qcom-test,alsa-dsp-restart),)
