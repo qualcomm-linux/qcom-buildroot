@@ -432,6 +432,28 @@ crw-------  1 root root 249, 65536 /dev/tpmrm0
 2</code></pre>
   <p class="callout good"><span class="ct">End to end</span>Both device nodes present, resource-manager too, reporting TPM <strong>2.0</strong>. ST33 &rlarr; GENI SE &rlarr; OP-TEE &rlarr; PTA &rlarr; Linux <code>tpm0</code>.</p>
 
+  <h3>Userspace: tpm2-tools</h3>
+  <p>The Buildroot rootfs ships the <strong>tpm2-tools</strong> package (<code>BR2_PACKAGE_TPM2_TOOLS</code> in <code>lemans.mk</code>, also wired as the <code>tpm</code> qcom-test), so the chip can be driven from the target over the in-kernel resource manager (<code>/dev/tpmrm0</code>, the default TCTI). A few checks that put real TPM2 traffic through the stack:</p>
+  <pre><code># identity &mdash; manufacturer reads back as STM, plus firmware and buffer sizes
+tpm2_getcap properties-fixed
+
+# full self-test of every implemented algorithm (returns 0, silent == pass)
+tpm2_selftest -f
+
+# hardware RNG &mdash; 16 bytes from the chip
+tpm2_getrandom 16 --hex
+
+# read the SHA-256 PCR bank (the measured-boot state)
+tpm2_pcrread sha256
+
+# extend PCR 23 and confirm it changed &mdash; a write round-trip
+tpm2_pcrextend 23:sha256=$(printf 'test' | sha256sum | cut -d' ' -f1)
+tpm2_pcrread sha256:23
+
+# create a primary key under the owner hierarchy &mdash; a heavier round-trip
+tpm2_createprimary -C o -c /tmp/primary.ctx</code></pre>
+  <p class="callout"><span class="ct">Reading it</span>A clean <code>tpm2_getcap</code> and a silent <code>tpm2_selftest -f</code> prove the whole path &mdash; ST33 &rlarr; GENI SE &rlarr; OP-TEE &rlarr; PTA &rlarr; <code>tpm0</code> &mdash; carries real TPM2 commands, not merely that the device node exists. <code>tpm2-tools</code> talks to <code>/dev/tpmrm0</code> by default; point it at the raw chip with <code>-T device:/dev/tpm0</code> if you need to bypass the kernel RM.</p>
+
   <!-- ===== Glossary ===== -->
   <h2 id="glossary">Glossary</h2>
   <div class="tbl-scroll">
