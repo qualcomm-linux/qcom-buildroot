@@ -1,0 +1,7 @@
+#!/bin/sh
+# Run by the kernel when the toolstack asks the guest to shut down. The
+# pause lets xenconsoled log the line before the domain goes away.
+name=$(/bin/busybox tr ' ' '\n' < /proc/cmdline | /bin/busybox sed -n 's/^xenguest=//p' | /bin/busybox tail -n 1)
+echo "xen-guest: poweroff name=${name}" > /dev/console
+/bin/busybox sleep 1
+/bin/busybox poweroff -f

@@ -1,0 +1,13 @@
+config BR2_PACKAGE_XEN_GUEST_EXT
+	bool "xen-guest"
+	depends on BR2_aarch64
+	depends on BR2_PACKAGE_BUSYBOX
+	help
+	  A small Linux guest for the Xen tests, in /opt/xen-guest: a
+	  kernel built for a Xen PV-console guest (Xen guest support,
+	  hvc0, the FF-A transport and the OP-TEE driver, so a guest
+	  given a TEE by its toolstack can reach it) and an initramfs
+	  with BusyBox. The guest's init prints a ready line and a TEE
+	  line on hvc0, stays up, and prints a poweroff line when the
+	  toolstack asks it to shut down (the console protocol of the
+	  test-definitions automated/linux/xen README).
