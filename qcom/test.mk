@@ -50,8 +50,19 @@
 # Tests whose tool is missing report skip, except optee-xtest and memtester,
 # which fail, and kvm-unit-tests, which reports nothing (its runner then
 # tries to fetch and build a copy).
+#
+#   XEN         n (default); y: what the plan's optional xen block
+#               (automated/linux/xen) needs in dom0, whatever TEST is: the
+#               Xen toolstack (xl, xenstored, xenconsoled, xen-init-dom0;
+#               xen_ext) built from XEN_PATH, and the test guest in
+#               /opt/xen-guest (xen_guest_ext). The toolstack must come from
+#               the tree of the hypervisor the board boots (Xen does not
+#               keep its domctl and sysctl interfaces stable across
+#               versions), so XEN_PATH (default $(ROOT)/xen) is that
+#               checkout, e.g. a project of the local manifest.
 ################################################################################
 TEST ?= n
+XEN ?= n
 
 QCOM_TESTS_ALL = boot-fingerprint boot-handoff cpu-features cpu-hotplug \
 		 cpufreq-policy kernel-health maxcpus memtest remoteproc-smoke \
@@ -326,4 +337,18 @@ buildroot: test-npu-model
 endif
 endif
 
+endif
+
+################################################################################
+# The Xen block (XEN=y): the toolstack only (the hypervisor is built with
+# the board's firmware), and the guest the tests start.
+ifeq ($(XEN),y)
+XEN_PATH ?= $(ROOT)/xen
+ifeq ($(wildcard $(XEN_PATH)/tools/xl),)
+$(error XEN=y: XEN_PATH=$(XEN_PATH) is not a Xen source tree)
+endif
+BR2_PACKAGE_XEN_EXT          ?= y
+BR2_PACKAGE_XEN_EXT_TOOLS    ?= y
+BR2_PACKAGE_XEN_EXT_SITE     := $(XEN_PATH)
+BR2_PACKAGE_XEN_GUEST_EXT    ?= y
 endif

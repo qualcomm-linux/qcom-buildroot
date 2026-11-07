@@ -62,6 +62,13 @@ tests a board runs. The `qcom-tests` runner and what it drives (stress-ng,
 fastrpc, v4l2-ctl, GStreamer) are built whatever `TEST` is. The header of
 `qcom/test.mk` lists what each test needs.
 
+`XEN=y` adds what the plan's optional Xen tests need in dom0, whatever
+`TEST` is: the Xen toolstack (xl, xenstored, xenconsoled, xen-init-dom0),
+built from `XEN_PATH` (default `$(ROOT)/xen`), which must be the tree of the
+hypervisor the board boots, and the test guest in `/opt/xen-guest`
+(a small Linux LTS kernel with Xen guest, FF-A and OP-TEE support, and a
+BusyBox initramfs).
+
 Building them needs, besides the usual host tools, a host `ffmpeg` with
 libx264, libx265 and libvpx (the video test streams). Proprietary SDKs are
 never part of the image: the inference test gets the Qualcomm AI Runtime
