@@ -69,6 +69,15 @@ hypervisor the board boots, and the test guest in `/opt/xen-guest`
 (a small Linux LTS kernel with Xen guest, FF-A and OP-TEE support, and a
 BusyBox initramfs).
 
+On Lemans, `XEN=y` also boots Xen: the kernel gets Xen dom0 support and the
+FF-A transport, the getty moves to `/dev/console` (hvc0 under Xen), `make
+xen` builds `xen.efi` from `XEN_PATH` with `lemans/xen/xen.config`, and `make
+uki` puts it on the ESP as `EFI/BOOT/bootaa64.efi` with its configuration
+(`bootaa64.cfg`), the kernel `Image`, the initramfs and the DTB, so U-Boot's
+EFI boot starts Xen and Xen starts dom0. The firmware must run OP-TEE as the
+FF-A SPMC (TF-A `SPD=spmd`, OP-TEE `CFG_CORE_SEL1_SPMC=y`): dom0 and the
+guests reach OP-TEE through Xen's FF-A mediator.
+
 Building them needs, besides the usual host tools, a host `ffmpeg` with
 libx264, libx265 and libvpx (the video test streams). Proprietary SDKs are
 never part of the image: the inference test gets the Qualcomm AI Runtime
