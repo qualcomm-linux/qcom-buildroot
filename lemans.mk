@@ -86,8 +86,14 @@ CFG_TEE_CORE_LOG_LEVEL := 2
 # Buildroot package selection
 ################################################################################
 
-# Serial console — Qualcomm MSM UART, not PL011 (overrides common.mk default)
+# Serial console — Qualcomm MSM UART, not PL011 (overrides common.mk default).
+# Under Xen (XEN=y) the UART belongs to the hypervisor and dom0's console is
+# hvc0: run the getty on /dev/console, the last console= of the command line.
+ifeq ($(XEN),y)
+BR2_TARGET_GENERIC_GETTY_PORT := console
+else
 BR2_TARGET_GENERIC_GETTY_PORT := ttyMSM0
+endif
 
 # Networking
 BR2_PACKAGE_DHCPCD  ?= y
@@ -726,7 +732,19 @@ linux-config:
 		-e TCG_OPTEE_DTPM \
 		-d TCG_TIS_SPI \
 		-d MODULES
+ifeq ($(XEN),y)
+	$(LINUX_EXPORTS) $(LINUX_PATH)/scripts/config --file $(LINUX_PATH)/.config \
+		$(foreach o,$(LINUX_XEN_DOM0_CONFIGS),-e $(o))
+endif
 	$(LINUX_EXPORTS) $(MAKE) -C $(LINUX_PATH) olddefconfig
+
+# Xen dom0 (XEN=y), everything built in (no modules): the toolstack's
+# devices, the hvc console, the backends a guest's disk and network need, and
+# the FF-A transport, the only way to OP-TEE (the S-EL1 SPMC) under Xen.
+LINUX_XEN_DOM0_CONFIGS = XEN XEN_DOM0 XEN_DEV_EVTCHN XENFS XEN_COMPAT_XENFS \
+	XEN_SYS_HYPERVISOR XEN_GNTDEV XEN_GRANT_DEV_ALLOC XEN_PRIVCMD \
+	XEN_BLKDEV_BACKEND XEN_NETDEV_BACKEND HVC_XEN HVC_XEN_FRONTEND \
+	ARM_FFA_TRANSPORT
 
 linux: linux-config linux-overlays
 	$(LINUX_EXPORTS) $(MAKE) -C $(LINUX_PATH) -j$(shell nproc) Image vmlinuz.efi
@@ -789,8 +807,61 @@ uki: linux buildroot linux-firmware
 	mcopy -i $(CURDIR)/lemans/output/efi.bin $(BOOTAA64_EFI) ::/EFI/BOOT/bootaa64.efi
 	mcopy -i $(CURDIR)/lemans/output/efi.bin $(LINUX_PATH)/uki.efi ::/EFI/Linux/uki.efi
 
+ifeq ($(XEN),y)
+	$(MAKE) xen-esp
+endif
+
 uki-clean:
 	rm -f $(LINUX_PATH)/uki.efi $(CURDIR)/lemans/output/efi.bin
+
+################################################################################
+# Xen (XEN=y) — the hypervisor and its boot set on the ESP
+#
+#   xen      xen.efi from XEN_PATH (qcom/test.mk), arm64 defconfig plus
+#            lemans/xen/xen.config, version suffix XEN_VENDORVERSION
+#            (default: LOCALVERSION, so the build fingerprint shows in Xen's
+#            banner)
+#   xen-esp  adds to efi.bin: EFI/BOOT/bootaa64.efi = xen.efi (so U-Boot's
+#            EFI boot starts Xen), bootaa64.cfg (Xen's EFI configuration)
+#            and the dom0 kernel Image, initramfs and DTB next to it.
+#            EFI/Linux/uki.efi stays for a native boot.
+#
+# Xen's console is the GENI debug UART (dtuart=serial0); dom0's is hvc0.
+################################################################################
+XEN_VENDORVERSION ?= $(LOCALVERSION)
+XEN_BUILD     = $(ROOT)/out/xen
+XEN_EFI       = $(XEN_BUILD)/xen.efi
+XEN_OPTIONS  ?= console=dtuart dtuart=serial0 conswitch=x loglvl=all \
+		guest_loglvl=warning dom0_mem=4G bootscrub=0 conring_size=4M
+XEN_DOM0_CMDLINE ?= console=hvc0 earlycon=xenboot root=/dev/ram0 rw \
+		qcom_scm.download_mode=1 arm-smmu.disable_bypass=0 \
+		clk_ignore_unused pd_ignore_unused
+
+.PHONY: xen xen-esp
+
+xen:
+	@test -f $(XEN_PATH)/xen/Makefile || { echo "XEN_PATH=$(XEN_PATH) is not a Xen tree"; exit 1; }
+	mkdir -p $(XEN_BUILD)
+	$(MAKE) -C $(XEN_PATH)/xen O=$(XEN_BUILD) XEN_TARGET_ARCH=arm64 \
+		CROSS_COMPILE=$(AARCH64_CROSS_COMPILE) defconfig
+	cat $(CURDIR)/lemans/xen/xen.config >> $(XEN_BUILD)/.config
+	$(MAKE) -C $(XEN_PATH)/xen O=$(XEN_BUILD) XEN_TARGET_ARCH=arm64 \
+		CROSS_COMPILE=$(AARCH64_CROSS_COMPILE) olddefconfig
+	@for l in $$(grep '^CONFIG_' $(CURDIR)/lemans/xen/xen.config); do \
+		grep -qx "$$l" $(XEN_BUILD)/.config || { echo "Xen config lost: $$l"; exit 1; }; \
+	done
+	$(MAKE) -C $(XEN_PATH)/xen O=$(XEN_BUILD) XEN_TARGET_ARCH=arm64 \
+		CROSS_COMPILE=$(AARCH64_CROSS_COMPILE) \
+		XEN_VENDORVERSION=$(XEN_VENDORVERSION) -j$(shell nproc)
+
+xen-esp: xen
+	printf '[global]\ndefault=xen\n\n[xen]\noptions=%s\nkernel=Image %s\nramdisk=initrd\ndtb=lemans-evk.dtb\n' \
+		'$(strip $(XEN_OPTIONS))' '$(strip $(XEN_DOM0_CMDLINE))' > $(XEN_BUILD)/bootaa64.cfg
+	mcopy -o -i $(CURDIR)/lemans/output/efi.bin $(XEN_EFI) ::/EFI/BOOT/bootaa64.efi
+	mcopy -o -i $(CURDIR)/lemans/output/efi.bin $(XEN_BUILD)/bootaa64.cfg ::/EFI/BOOT/bootaa64.cfg
+	mcopy -o -i $(CURDIR)/lemans/output/efi.bin $(LINUX_PATH)/arch/arm64/boot/Image ::/EFI/BOOT/Image
+	mcopy -o -i $(CURDIR)/lemans/output/efi.bin $(BR_INITRAMFS) ::/EFI/BOOT/initrd
+	mcopy -o -i $(CURDIR)/lemans/output/efi.bin $(LINUX_DTB) ::/EFI/BOOT/lemans-evk.dtb
 
 ################################################################################
 # efi-kernel-only — Build an efi.bin that boots the full Yocto rootfs
