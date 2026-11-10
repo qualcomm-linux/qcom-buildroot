@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dTPM + DRTM with Xen: OP-TEE on Qualcomm Lemans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_rtd.css">
+<style>
+  /* Component styles ported from the dTPM page and mapped
+     onto the RTD theme palette. */
+  .drtm {
+    --surface:#f6f7f9; --surface2:#eef0f4; --text:#404040; --muted:#5c636e;
+    --border:#e1e4e5; --accent:#2980b9; --accent-soft:#e7f2fa;
+    --good:#1a7f4b; --good-soft:#e3f3ea; --bad:#c0392b; --bad-soft:#fbe9e7;
+    --warn:#b7791f; --warn-soft:#fff3dc;
+    --mono:'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  .drtm .lede { color: var(--muted); font-size: 1.02rem; margin: .2rem 0 1.1rem; }
+  .drtm .fig { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin: 20px 0; }
+  .drtm .fig figcaption { color: var(--muted); font-size: .85rem; margin-top: 12px; text-align: center; }
+  .drtm .fig svg { display: block; width: 100%; height: auto; }
+  .drtm .tbl-scroll { overflow-x: auto; }
+  .drtm table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: .9rem; }
+  .drtm th, .drtm td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .drtm th { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--surface); }
+  .drtm tbody tr:hover { background: var(--surface); }
+  .drtm td code { white-space: nowrap; }
+  .drtm .callout { border: 1px solid var(--border); border-left-width: 4px; border-radius: 10px; padding: 14px 18px; margin: 18px 0; background: var(--surface); }
+  .drtm .callout .ct { font-weight: 650; margin-bottom: 4px; display: block; }
+  .drtm .callout.key { border-left-color: var(--accent); background: var(--accent-soft); }
+  .drtm .callout.good { border-left-color: var(--good); background: var(--good-soft); }
+  .drtm .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .drtm .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .drtm .mono-val { font-family: var(--mono); font-weight: 650; }
+  .drtm .tag { font-family: var(--mono); font-size: .76rem; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--border); white-space: nowrap; }
+  .drtm .tag.g { background: var(--good-soft); color: var(--good); border-color: transparent; }
+  .drtm .tag.b { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .drtm .tag.w { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .drtm .grid2 { display: grid; gap: 16px; }
+  @media (min-width: 680px) { .drtm .grid2 { grid-template-columns: 1fr 1fr; } }
+  .drtm .steps { counter-reset: step; list-style: none; padding: 0; margin: 18px 0; }
+  .drtm .steps li { position: relative; padding: 2px 0 16px 46px; border-left: 2px solid var(--border); margin-left: 16px; }
+  .drtm .steps li::before { counter-increment: step; content: counter(step); position: absolute; left: -17px; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: .9rem; }
+  .drtm .steps li:last-child { border-left-color: transparent; }
+  .drtm .steps li h4 { margin: 2px 0 4px; font-size: 1rem; }
+  /* SVG theming */
+  .drtm svg .box { fill: var(--surface2); stroke: var(--border); stroke-width: 1.5; }
+  .drtm svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .drtm svg .box-good { fill: var(--good-soft); stroke: var(--good); stroke-width: 1.5; }
+  .drtm svg .box-bad { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.5; }
+  .drtm svg .box-warn { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.5; }
+  .drtm svg text { fill: var(--text); font-family: Lato, sans-serif; }
+  .drtm svg .t-mono { font-family: var(--mono); }
+  .drtm svg .t-muted { fill: var(--muted); }
+  .drtm svg .t-accent { fill: var(--accent); }
+  .drtm svg .t-good { fill: var(--good); }
+  .drtm svg .t-bad { fill: var(--bad); }
+  .drtm svg .edge { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .drtm svg .edge-good { stroke: var(--good); stroke-width: 2; fill: none; }
+  .drtm svg .edge-bad { stroke: var(--bad); stroke-width: 2; fill: none; }
+  .drtm svg .fillmuted { fill: var(--muted); }
+  .drtm svg .fillgood { fill: var(--good); }
+  .drtm svg .fillbad { fill: var(--bad); }
+</style>
+</head>
+<body class="rtd" data-page="drtm">
+<main class="rtd-doc">
+
+  <div class="rtd-breadcrumb">
+    <a href="index.html">OP-TEE on Qualcomm Lemans</a>
+    <span class="sep">›</span>
+    <a href="index.html#dev-branches">Development Branches</a>
+    <span class="sep">›</span>
+    dTPM + DRTM (Xen)
+  </div>
+
+  <div class="drtm">
+
+  <h1>dTPM + DRTM with Xen</h1>
+  <p class="lede">The discrete TPM of <a href="devel_lemans_security_dtpm.html">features/lemans/security/dtpm</a>, plus the pieces of an Arm DRTM (DEN0113) dynamic launch: TF-A BL31 as the dynamic configuration environment (DCE), Xen as the dynamically launched measured environment (DLME), and OP-TEE as the S-EL1 SPMC that owns the TPM and reaches Xen's guests over FF-A only.</p>
+
+  <div class="rtd-note">
+    <strong>Branch:</strong> <code>features/lemans/security/dtpm-drtm</code>, a feature branch of
+    <a href="https://github.com/qualcomm-linux/qcom-buildroot">qcom-buildroot</a> on top of
+    <code>features/lemans/security/dtpm</code>. Its manifest takes Linux (on top of the dTPM kernel), TF-A, OP-TEE, Xen and the test
+    definitions from the <code>features/lemans/drtm</code> branch of each project, and <code>lemans.mk</code>
+    builds the FF-A firmware, BL31 with the DRTM service and the Xen boot by default.
+  </div>
+
+  <h2 id="building">Building it</h2>
+  <p>Same flow as the dTPM branch; only the branch name changes. <code>XEN=y</code> and <code>DRTM=y</code> are the defaults here.</p>
+<pre><code>mkdir sandbox.lemans &amp;&amp; cd sandbox.lemans
+repo init -u https://github.com/qualcomm-linux/qcom-buildroot \
+          -b features/lemans/security/dtpm-drtm -m manifests/lemans.xml
+repo sync -j4 --no-clone-bundle
+
+cd build
+make -j8 toolchains
+make all                  # OP-TEE SPMC, BL31 (SPMD + DRTM), U-Boot, Linux dom0, Buildroot, Xen, efi.bin
+make bootimage            # tz.mbn + uefi.elf
+make flash-lava           # package + flash a lab board (lemans/lava/flash-lava-xen.yaml)
+
+# optional: a fingerprint every stage prints at boot
+make all bootimage LOCALVERSION=-mybuild-001</code></pre>
+  <div class="callout key"><span class="ct">XEN=n DRTM=n</span>gives back the plain OP-TEE boot of the dTPM branch: <code>SPD=opteed</code>, OP-TEE on the SMC ABI, Linux started directly from the UKI.</div>
+
+  <h2 id="trees">Trees</h2>
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Project</th><th>Branch</th><th>What it carries</th></tr></thead>
+    <tbody>
+      <tr><td><strong>arm-trusted-firmware</strong></td><td><a href="https://github.com/EmbeddedAndroid/arm-trusted-firmware/tree/features/lemans/drtm">EmbeddedAndroid · features/lemans/drtm</a></td><td>The SPMC manifest built into BL31 (U-Boot SPL replaces BL2, so nothing else passes it); the QTI DRTM platform port; DMA protection for the SMMU-500 instances (an SMMUv2 abort-all helper next to the SMMUv3 one).</td></tr>
+      <tr><td><strong>optee_os</strong></td><td><a href="https://github.com/EmbeddedAndroid/optee_os/tree/features/lemans/drtm">EmbeddedAndroid · features/lemans/drtm</a></td><td>The dTPM stack of <a href="https://github.com/OP-TEE/optee_os/pull/8155">OP-TEE/optee_os#8155</a> (TIS SPI driver and the dTPM mediator PTA), with locality 4 and the SPI hardening on top, the SPMC fixes from the Nord/Eliza Xen work, and <code>CFG_DT</code> forced for an embedded DT with an SPMC.</td></tr>
+      <tr><td><strong>xen</strong></td><td><a href="https://github.com/EmbeddedAndroid/xen/tree/features/lemans/drtm">EmbeddedAndroid · features/lemans/drtm</a></td><td>The Qualcomm Xen tree (GENI UART, SMMU, FF-A mediator) with the Lemans SoC match.</td></tr>
+      <tr><td><strong>linux</strong></td><td><a href="https://github.com/EmbeddedAndroid/linux/tree/features/lemans/drtm">EmbeddedAndroid · features/lemans/drtm</a></td><td>The dTPM kernel of <code>buildroot/lemans/dtpm</code> (the OP-TEE TPM transport core and discrete TPM driver, <a href="https://lore.kernel.org/all/20261110141923.3100770-1-jorge.ramirez@oss.qualcomm.com">v2 on linux-integrity</a>) plus the OP-TEE firmware node, the TIS locality support, and two dom0 fixes: gcc-sa8775p no longer parks the QUP serial engine clocks at registration (that garbled the Xen console), and msm DPU no longer tears down the KMS twice when hardware init fails.</td></tr>
+      <tr><td><strong>test-definitions</strong></td><td><a href="https://github.com/EmbeddedAndroid/test-definitions/tree/features/lemans/drtm">EmbeddedAndroid · features/lemans/drtm</a></td><td>The tpm2 tests and the Xen tests (dom0, xl guests, OP-TEE over FF-A from dom0 and from a guest).</td></tr>
+      <tr><td><strong>u-boot</strong></td><td>qualcomm-linux · pinned qcom-next</td><td>Unchanged from the dTPM branch.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="boot">The boot</h2>
+  <figure class="fig">
+    <svg viewBox="0 0 900 200" role="img" aria-label="Boot chain: XBL, U-Boot SPL, BL31 with SPMD and DRTM, OP-TEE SPMC, U-Boot proper, Xen, dom0 Linux">
+      <rect class="box" x="10" y="70" width="90" height="60" rx="10"/>
+      <text x="55" y="105" text-anchor="middle" font-weight="700" font-size="13">XBL</text>
+      <rect class="box" x="125" y="70" width="110" height="60" rx="10"/>
+      <text x="180" y="98" text-anchor="middle" font-weight="700" font-size="13">U-Boot SPL</text>
+      <text x="180" y="116" text-anchor="middle" font-size="10" class="t-muted t-mono">tz.mbn</text>
+      <rect class="box-accent" x="260" y="40" width="150" height="120" rx="10"/>
+      <text x="335" y="68" text-anchor="middle" font-weight="700" font-size="13">TF-A BL31 (EL3)</text>
+      <text x="335" y="92" text-anchor="middle" font-size="11" class="t-mono">SPMD</text>
+      <text x="335" y="112" text-anchor="middle" font-size="11" class="t-mono">DRTM service (DCE)</text>
+      <text x="335" y="132" text-anchor="middle" font-size="10" class="t-muted">SMMU-500 DMA protection</text>
+      <rect class="box-good" x="260" y="170" width="150" height="26" rx="8"/>
+      <text x="335" y="188" text-anchor="middle" font-size="11">OP-TEE S-EL1 SPMC + dTPM</text>
+      <rect class="box" x="435" y="70" width="120" height="60" rx="10"/>
+      <text x="495" y="98" text-anchor="middle" font-weight="700" font-size="13">U-Boot proper</text>
+      <text x="495" y="116" text-anchor="middle" font-size="10" class="t-muted">EFI boot</text>
+      <rect class="box-accent" x="580" y="70" width="130" height="60" rx="10"/>
+      <text x="645" y="98" text-anchor="middle" font-weight="700" font-size="13">Xen (EL2)</text>
+      <text x="645" y="116" text-anchor="middle" font-size="10" class="t-muted">DLME, FF-A mediator</text>
+      <rect class="box" x="735" y="70" width="150" height="60" rx="10"/>
+      <text x="810" y="98" text-anchor="middle" font-weight="700" font-size="13">dom0 Linux</text>
+      <text x="810" y="116" text-anchor="middle" font-size="10" class="t-muted">hvc0, /dev/tpm0, xl</text>
+      <path class="edge" d="M100 100 H125"/><path class="edge" d="M235 100 H260"/><path class="edge" d="M410 100 H435"/>
+      <path class="edge" d="M555 100 H580"/><path class="edge" d="M710 100 H735"/>
+    </svg>
+    <figcaption>The uefi partition FIT still carries BL31, OP-TEE and U-Boot proper; efi.bin carries xen.efi as <code>EFI/BOOT/bootaa64.efi</code>, its <code>bootaa64.cfg</code>, and the dom0 Image, initramfs and DTB. The UKI stays on the ESP for a native boot.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>FF-A only.</strong> BL31 runs <code>SPD=spmd SPMD_SPM_AT_SEL2=0</code> and OP-TEE <code>CFG_CORE_SEL1_SPMC=y</code>. Xen does not mediate the OP-TEE SMC ABI; dom0 and the guests reach OP-TEE (and through it the dTPM) via Xen's FF-A mediator.</li>
+    <li><strong>Consoles.</strong> Xen owns the GENI debug UART (<code>console=dtuart dtuart=serial0</code>); dom0's console is <code>hvc0</code> and the getty runs on <code>/dev/console</code>.</li>
+    <li><strong>DRTM.</strong> <code>DRTM=y</code> builds BL31 with <code>DRTM_SUPPORT=1</code>; <code>lemans.mk</code> initializes the libeventlog and Mbed TLS submodules of TF-A it needs.</li>
+  </ul>
+
+  <h2 id="drtm">DRTM: where it stands</h2>
+  <p>The target follows the tboot model: the DCE measures the DLME into PCR 17/18 at locality 4 through the secure-world dTPM, and Xen measures dom0 at locality 2 into PCR 19.</p>
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Piece</th><th>State</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>dTPM in OP-TEE, locality 4 refused to the normal world</td><td><span class="tag g">done</span></td><td>As on the dTPM branch; the tpm2 tests pass from dom0 under Xen.</td></tr>
+      <tr><td>Xen + dom0 + xl guests + OP-TEE over FF-A</td><td><span class="tag g">done</span></td><td>LAVA <a href="https://lava.infra.foundries.io/scheduler/job/557881">557881</a>: dom0, four parallel xl guests, OP-TEE xtest and FF-A from dom0 and from a guest, tpm2 tests.</td></tr>
+      <tr><td>DEN0113 service in BL31 (version, features, set/get error, launch)</td><td><span class="tag g">done</span></td><td>Exercised from U-Boot in LAVA <a href="https://lava.infra.foundries.io/scheduler/job/557870">557870</a> (test build, see <a href="#scenario">below</a>); unaligned parameters and a DLME in a secure carveout are refused.</td></tr>
+      <tr><td>DMA protection during launch</td><td><span class="tag g">done</span></td><td>All non-secure SMMU-500 streams fault until the DLME takes over; a UFS doorbell from the DLME faults on the apps SMMU (<a href="https://lava.infra.foundries.io/scheduler/job/557870">557870</a>).</td></tr>
+      <tr><td>DRTM error record across reset</td><td><span class="tag w">open</span></td><td>RAM only today; needs an always-on slot.</td></tr>
+      <tr><td>BL31 to OP-TEE measurement path (SPMD to SPMC direct message), normal-world firewall on the TPM</td><td><span class="tag w">in progress</span></td><td></td></tr>
+      <tr><td>U-Boot launch preamble (<code>DRTM_DYNAMIC_LAUNCH</code> from U-Boot)</td><td><span class="tag w">not started</span></td><td>Until then this branch boots Xen through EFI, without a dynamic launch.</td></tr>
+      <tr><td>Xen as the DLME (non-EFI entry, dom0 measurement)</td><td><span class="tag w">not started</span></td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="scenario">The validated DRTM scenario</h2>
+  <p>What is proven on the board today is the DCE half of the launch: BL31 answers the DEN0113 calls, refuses malformed launches, turns on DMA protection and enters a DLME at NS-EL2 with every non-secure DMA stream blocked. The run below (<a href="https://lava.infra.foundries.io/scheduler/job/557870">LAVA job 557870</a>, <code>rb8-hyd-02</code>) uses this branch's TF-A and OP-TEE with a test U-Boot whose preboot issues the DRTM SMCs, and a small test DLME that reports what it sees; neither test piece is built by this branch.</p>
+  <ol class="steps">
+    <li><h4>Cold boot</h4>BL31 sets up the DRTM service next to the SPMD; OP-TEE starts as the S-EL1 SPMC. AOP, SAIL and CPUCP are DMA-capable but trusted (non-host platforms). The GPU SMMU is only engaged when GPU CX is on; at this point it is off.
+<pre><code>NOTICE:  BL31: v2.15.0(release):QCDFP-261110-3044
+INFO:    DRTM service setup
+WARNING: DRTM: the platform includes trusted DMA-capable devices (non-host platforms)
+INFO:    DRTM: GPU CX off (GDSCR 0x22f001), GPU SMMU not engaged
+I/TC: OP-TEE version: QCDFP-261110-3044 ...</code></pre></li>
+    <li><h4>Discovery and the error record</h4>From U-Boot: <code>DRTM_VERSION</code>, <code>DRTM_FEATURES</code> (TPM, minimum memory, DMA protection, boot PE, TCB hashes, DLME image authentication), then <code>DRTM_SET_ERROR</code> and <code>DRTM_GET_ERROR</code> round trip.</li>
+    <li><h4>Malformed launches are refused</h4><code>DRTM_DYNAMIC_LAUNCH</code> with a parameter block that is not 4 KiB aligned, and with a DLME placed inside secure memory, both fail without touching the SMMUs.
+<pre><code>ERROR:   DRTM: parameters structure is not 4-KiB-aligned
+ERROR:   DRTM: DLME region lies within secure memory</code></pre></li>
+    <li><h4>DMA protection</h4>On a valid launch BL31 puts both SMMU-500 instances into abort-all: every stream mapping group of the apps SMMU (224) and of the PCIe SMMU (64) is handed to the non-secure side with client bypass off and unmatched streams faulting (NSCR0 <code>CLIENTPD</code> cleared, <code>USFCFG</code> set). The DLME has to program the SMMUs before any device can reach memory again.
+<pre><code>INFO:    SMMUv2 @0x15000000: 224 of 224 stream mapping groups Non-secure, NSCR0 0x290400
+INFO:    SMMUv2 @0x15200000: 64 of 64 stream mapping groups Non-secure, NSCR0 0x240400</code></pre></li>
+    <li><h4>DLME entry</h4>The DLME starts at NS-EL2 (<code>CurrentEL</code> 0x8) with <code>x0</code> pointing at the DLME data (header version 1) and finds the SMMUs as BL31 left them, with no fault recorded.
+<pre><code>DLME_START QCDFP-261110-3044 x0=0x00000000e0100000 x1=0x0000000000100000 CurrentEL=0x0000000000000008</code></pre></li>
+    <li><h4>A DMA attempt is blocked</h4>The DLME rings the UFS host controller doorbell with a transfer request. The UFS DMA never reaches memory: the apps SMMU records an unidentified stream fault (<code>GFSR</code> 0x80000002) for stream ID 0x100, the UFS controller.
+<pre><code>DLME_APPS_FAULT_AFTER_UFS GFSR,GFSYNR0,GFSYNR1,GFAR 0x0000000080000002 0x0000000000000000 0x0000000000000100 0x0000000f536cb800
+DLME_DONE QCDFP-261110-3044</code></pre></li>
+  </ol>
+  <div class="callout key"><span class="ct">The rest of the stack under Xen</span><a href="https://lava.infra.foundries.io/scheduler/job/557881">LAVA job 557881</a> (<code>rb8-hyd-03</code>) boots the same firmware and the kernel of this branch with the test rootfs: the tpm2 tests from dom0 (locality 4 refused to the normal world), OP-TEE xtest (37772 subtests, 0 failed), and the Xen tests (dom0, parallel xl guests, OP-TEE over FF-A from dom0 and from a guest).</div>
+
+  <h2 id="verify">Verification</h2>
+  <p><code>make flash-lava</code> on this branch from a clean <code>repo sync</code>, built with <code>LOCALVERSION=-QCDFP-261111-3050</code>, flashed and booted <a href="https://lava.infra.foundries.io/scheduler/job/559581">LAVA job 559581</a> on <code>rb8-hyd-03</code>. Every stage printed the fingerprint:</p>
+<pre><code>U-Boot SPL 2026.07-rc4-QCDFP-261111-3050-g3902cb4183e0-dirty
+NOTICE:  BL31: v2.15.0(release):QCDFP-261111-3050
+I/TC: OP-TEE version: QCDFP-261111-3050 (gcc version 14.3.1 ...) aarch64
+U-Boot 2026.07-rc4-QCDFP-261111-3050-g3902cb4183e0-dirty
+(XEN) Xen version 4.23-unstable-QCDFP-261111-3050 ... debug=y
+[    0.000000] Linux version 7.1.0-rc6-QCDFP-261111-3050-g4f98c7e9f301 ...
+buildroot login: root
+# xl info | grep -E '^xen_(version|extra)'
+xen_extra              : -unstable-QCDFP-261111-3050
+xen_version            : 4.23-unstable-QCDFP-261111-3050
+# dmesg | grep optee
+optee: probing for conduit method.
+optee: api uid mismatch
+optee firmware:optee: probe with driver optee failed with error -22
+optee: revision 4.11 (979c0eec)
+optee: initialized driver</code></pre>
+  <p>The SMC-conduit probe is refused (there is no OP-TEE SMC ABI under the SPMD); the driver then binds over FF-A, through Xen's mediator.</p>
+  <p>On the board:</p>
+<pre><code># dom0 runs under Xen
+cat /sys/hypervisor/type          # xen
+xl info | grep -E '^xen_(version|extra)'
+xl list                           # Domain-0
+
+# OP-TEE through the FF-A mediator, and the dTPM behind it
+dmesg | grep -i -E 'arm_ffa|optee'
+tpm2_getcap properties-fixed
+tpm2_pcrread sha256:17,18,19</code></pre>
+
+  <h2 id="glossary">Glossary</h2>
+  <div class="tbl-scroll">
+  <table>
+    <tbody>
+      <tr><td><strong>DRTM</strong></td><td>Dynamic Root of Trust for Measurement: a late, measured launch of a small trusted environment, independent of the boot chain before it (Arm DEN0113; the x86 counterparts are Intel TXT and AMD SKINIT).</td></tr>
+      <tr><td><strong>DCE</strong></td><td>Dynamic Configuration Environment: the code that performs the launch, here the DRTM service in TF-A BL31.</td></tr>
+      <tr><td><strong>DLME</strong></td><td>Dynamically Launched Measured Environment: what gets launched and measured, here Xen.</td></tr>
+      <tr><td><strong>SPMD / SPMC</strong></td><td>The TF-A dispatcher and the secure partition manager of FF-A; with <code>SPMD_SPM_AT_SEL2=0</code> OP-TEE is the SPMC at S-EL1.</td></tr>
+      <tr><td><strong>FF-A</strong></td><td>Arm Firmware Framework for A-profile: the messaging ABI between the normal world, the hypervisor and the secure world.</td></tr>
+      <tr><td><strong>Locality</strong></td><td>TPM access level. PCR 17 and 18 are reset only from locality 4 and cannot be extended from locality 0 or 1; PCR 19 is extended from locality 2, the DLME's own measurements.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="rtd-prevnext">
+    <a href="index.html">← Back to index</a>
+    <span class="spacer"></span>
+    <a href="index.html#dev-branches">Development Branches</a>
+  </div>
+
+  </div><!-- /.drtm -->
+
+</main>
+<script src="_rtd.js"></script>
+</body>
+</html>
