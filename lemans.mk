@@ -257,6 +257,16 @@ ifeq ($(XEN),y)
 OPTEE_OS_COMMON_EXTRA_FLAGS += CFG_CORE_SEL1_SPMC=y
 endif
 
+# Build fingerprint: LOCALVERSION (e.g. LOCALVERSION=-QCDFP-261110-3040) is a
+# command-line variable, so U-Boot (SPL and proper) and Linux see it as is and
+# Xen takes it as XEN_VENDORVERSION; OP-TEE (here) and TF-A (BUILD_STRING,
+# see tfa) have their own version strings. With it set, every stage prints
+# the fingerprint in its boot banner.
+BUILD_FINGERPRINT = $(patsubst -%,%,$(LOCALVERSION))
+ifneq ($(BUILD_FINGERPRINT),)
+OPTEE_OS_COMMON_EXTRA_FLAGS += TEE_IMPL_VERSION=$(BUILD_FINGERPRINT)
+endif
+
 # Buildroot rejects PATH entries containing spaces (Windows paths from WSL).
 # Export a sanitized PATH for all sub-makes that invoke buildroot.
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v ' ' | tr '\n' ':' | sed 's/:$$//')
@@ -498,6 +508,9 @@ TF_A_FLAGS  ?= PLAT=lemans_evk SPD=opteed
 endif
 ifeq ($(DRTM),y)
 TF_A_FLAGS  += DRTM_SUPPORT=1
+endif
+ifneq ($(BUILD_FINGERPRINT),)
+TF_A_FLAGS  += BUILD_STRING=$(BUILD_FINGERPRINT)
 endif
 
 BL31_BIN = $(TF_A_PATH)/build/lemans_evk/release/bl31/bl31.elf
