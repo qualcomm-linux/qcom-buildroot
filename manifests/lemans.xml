@@ -4,17 +4,24 @@
   <remote name="qcl"   fetch="https://github.com/qualcomm-linux" />
   <remote name="tfa"   fetch="https://review.trustedfirmware.org/TF-A" />
   <remote name="optee" fetch="https://github.com/OP-TEE" />
-  <remote name="ldts"  fetch="https://github.com/ldts" />
+  <remote name="ea"    fetch="https://github.com/EmbeddedAndroid" />
 
-  <project path="build" remote="qcl" name="qcom-buildroot.git" revision="features/lemans/security/dtpm">
+  <project path="build" remote="qcl" name="qcom-buildroot.git" revision="features/lemans/security/dtpm-drtm">
     <linkfile src="lemans.mk" dest="build/Makefile" />
   </project>
 
   <remove-project                      name="linaro-swg/linux.git" />
   <remove-project                      name="OP-TEE/optee_os.git" />
 
-  <project path="linux"                remote="ldts"  name="linux.git"              revision="buildroot/lemans/dtpm" clone-depth="10" sync-tags="false"/>
-  <project path="arm-trusted-firmware" remote="qcl"   name="trusted-firmware-a.git" revision="12d255322adb618d3a6fd50a45bebd489c09e005" upstream="qcom-next"/>
-  <project path="u-boot"               remote="qcl"   name="u-boot.git"             revision="3902cb4183e03ce6349b7c465123735ba6df34d9" upstream="qcom-next"/>
-  <project path="optee_os"             remote="ldts"  name="optee_os.git"           revision="buildroot/lemans/dtpm"/>
+  <!-- The DRTM trees: features/lemans/drtm of each project. -->
+  <project path="linux"                remote="ea"    name="linux.git"                revision="features/lemans/drtm" clone-depth="10" sync-tags="false"/>
+  <project path="arm-trusted-firmware" remote="ea"    name="arm-trusted-firmware.git" revision="features/lemans/drtm"/>
+  <project path="optee_os"             remote="ea"    name="optee_os.git"             revision="features/lemans/drtm"/>
+  <project path="xen"                  remote="ea"    name="xen.git"                  revision="features/lemans/drtm"/>
+  <!-- Not built: the test definitions LAVA_TEST_BRANCH points flash-lava-test at. -->
+  <project path="test-definitions"     remote="ea"    name="test-definitions.git"     revision="features/lemans/drtm"/>
+  <!-- xtest from 962b322 (regression 1048) needs the stack protector PTA
+       commands of a newer optee_os than features/lemans/drtm. -->
+  <extend-project name="OP-TEE/optee_test.git" revision="e92a1880e74b45c5ff31b8d5b917ab2278f06760"/>
+  <project path="u-boot"               remote="qcl"   name="u-boot.git"               revision="3902cb4183e03ce6349b7c465123735ba6df34d9" upstream="qcom-next"/>
 </manifest>
