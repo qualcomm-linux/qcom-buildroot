@@ -85,16 +85,19 @@ override COMPILE_S_KERNEL  := 64
 CFG_TEE_CORE_LOG_LEVEL := 2
 
 ################################################################################
-# Xen
+# Xen and DRTM
 #
 # This branch boots Xen as the DRTM dynamically launched measured environment,
-# so XEN defaults to y here (qcom/test.mk defaults it to n for other boards):
+# so both default to y here (qcom/test.mk defaults XEN to n for other boards):
 #   XEN=y   the firmware runs OP-TEE as the S-EL1 SPMC under the TF-A SPMD
 #           (Xen reaches OP-TEE through its FF-A mediator only), and the ESP
 #           boots Xen with dom0 (see the xen and xen-esp targets).
-# XEN=n builds the plain OP-TEE boot of features/lemans/security/dtpm.
+#   DRTM=y  BL31 carries the Arm DRTM (DEN0113) service, the dynamic launch
+#           Xen is started through.
+# XEN=n DRTM=n builds the plain OP-TEE boot of features/lemans/security/dtpm.
 ################################################################################
-XEN ?= y
+XEN  ?= y
+DRTM ?= y
 
 ################################################################################
 # Buildroot package selection
@@ -493,14 +496,24 @@ TF_A_FLAGS  ?= PLAT=lemans_evk SPD=spmd SPMD_SPM_AT_SEL2=0
 else
 TF_A_FLAGS  ?= PLAT=lemans_evk SPD=opteed
 endif
+ifeq ($(DRTM),y)
+TF_A_FLAGS  += DRTM_SUPPORT=1
+endif
 
 BL31_BIN = $(TF_A_PATH)/build/lemans_evk/release/bl31/bl31.elf
 # Flat BL31 image (objcopy output) embedded into the uefi FIT as the ATF firmware.
 BL31_BIN_FLAT = $(TF_A_PATH)/build/lemans_evk/release/bl31.bin
 
-.PHONY: tfa tfa-clean
+.PHONY: tfa tfa-clean tfa-submodules
 
-tfa:
+# DRTM_SUPPORT=1 builds the event log (contrib/libeventlog) and the measurement
+# hashes (Mbed TLS, contrib/mbed-tls, which needs its own framework submodule)
+# from TF-A submodules, at the commits the TF-A tree pins.
+tfa-submodules:
+	git -C $(TF_A_PATH) submodule update --init contrib/libeventlog
+	git -C $(TF_A_PATH) submodule update --init --recursive contrib/mbed-tls
+
+tfa: $(if $(filter y,$(DRTM)),tfa-submodules)
 	$(TF_A_EXPORTS) $(MAKE) -C $(TF_A_PATH) -j$(shell nproc) $(TF_A_FLAGS) bl31
 
 tfa-clean:
