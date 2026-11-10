@@ -12,6 +12,8 @@
 #                              (uefi partition image; a FIT despite the .elf name)
 #
 # Boot sequence: XBL → U-Boot SPL → TF-A BL31 → OP-TEE OS → U-Boot proper → Linux
+# (XEN=y, the default on this branch: ... → U-Boot proper → Xen → dom0 Linux,
+# with OP-TEE as the S-EL1 SPMC under the TF-A SPMD)
 # U-Boot SPL replaces TF-A BL2 as the first open-source stage.
 # TF-A BL31 (Secure Monitor) remains resident at EL3 after boot.
 # Signing uses qtestsign (open-source, local — no QTI CASS access required).
@@ -81,6 +83,18 @@ override COMPILE_S_KERNEL  := 64
 # 3 (DEBUG), which floods ttyMSM0 with OP-TEE trace. Drop to 1 (errors only).
 # Set before the common.mk include so its ?= default does not win.
 CFG_TEE_CORE_LOG_LEVEL := 2
+
+################################################################################
+# Xen
+#
+# This branch boots Xen as the DRTM dynamically launched measured environment,
+# so XEN defaults to y here (qcom/test.mk defaults it to n for other boards):
+#   XEN=y   the firmware runs OP-TEE as the S-EL1 SPMC under the TF-A SPMD
+#           (Xen reaches OP-TEE through its FF-A mediator only), and the ESP
+#           boots Xen with dom0 (see the xen and xen-esp targets).
+# XEN=n builds the plain OP-TEE boot of features/lemans/security/dtpm.
+################################################################################
+XEN ?= y
 
 ################################################################################
 # Buildroot package selection
@@ -235,6 +249,11 @@ CFG_IN_TREE_EARLY_TAS += qcom_pas/cff7d191-7ca0-4784-af13-48223b9a4fbe
 
 OPTEE_OS_COMMON_EXTRA_FLAGS += CFG_QCOM_GENI_SPI=y CFG_QUP_SPI_TEST=y
 
+# Under Xen, OP-TEE is the S-EL1 SPMC (TF-A SPD=spmd, manifest built into BL31).
+ifeq ($(XEN),y)
+OPTEE_OS_COMMON_EXTRA_FLAGS += CFG_CORE_SEL1_SPMC=y
+endif
+
 # Buildroot rejects PATH entries containing spaces (Windows paths from WSL).
 # Export a sanitized PATH for all sub-makes that invoke buildroot.
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v ' ' | tr '\n' ':' | sed 's/:$$//')
@@ -361,7 +380,7 @@ help:
 	@echo "  U_BOOT_DEVICE_TREE    U-Boot device tree          (default: qcom/lemans-evk)"
 	@echo "  LINUX_CMDLINE         Kernel command line in UKI   (default: console=ttyMSM0 …)"
 	@echo "  SWIV_SCRIPT           Path to swiv_build_utility.py"
-	@echo "  TF_A_FLAGS            Extra flags for TF-A make   (default: PLAT=lemans_evk SPD=opteed)"
+	@echo "  TF_A_FLAGS            Extra flags for TF-A make   (default: PLAT=lemans_evk SPD=spmd SPMD_SPM_AT_SEL2=0; SPD=opteed with XEN=n)"
 	@echo "  QTESTSIGN_PATH        Path to qtestsign checkout (default: \$$(ROOT)/qtestsign)"
 	@echo "  UFS_PROVISION_XML     UFS provision layout        (default: provision_1_2.xml)"
 
@@ -469,7 +488,11 @@ u-boot-proper-clean:
 #   arm-trusted-firmware/build/lemans_evk/release/bl31/bl31.elf
 ################################################################################
 TF_A_EXPORTS = CROSS_COMPILE="$(AARCH64_CROSS_COMPILE)"
+ifeq ($(XEN),y)
+TF_A_FLAGS  ?= PLAT=lemans_evk SPD=spmd SPMD_SPM_AT_SEL2=0
+else
 TF_A_FLAGS  ?= PLAT=lemans_evk SPD=opteed
+endif
 
 BL31_BIN = $(TF_A_PATH)/build/lemans_evk/release/bl31/bl31.elf
 # Flat BL31 image (objcopy output) embedded into the uefi FIT as the ATF firmware.
