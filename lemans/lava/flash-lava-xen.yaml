@@ -1,0 +1,81 @@
+# LAVA flash job for the Xen boot (flash-lava with XEN=y, the default on
+# features/lemans/security/dtpm-drtm)
+#
+# Same flash as flash-lava.yaml (tarball from `make flash-lava`, LUNs 0-5,
+# rootfs stripped; efi.bin carries Xen, dom0 and its initramfs, so no rootfs
+# is needed on the board). The boot differs: the debug UART belongs to Xen,
+# dom0's console is hvc0 behind it, and the Buildroot initramfs logs in as
+# root without a password.
+#
+# Xen's console drops input characters while dom0 is still busy right after
+# the login prompt (to be root-caused in Xen's GENI UART driver), hence the
+# character delays and the sleep before the first command.
+#
+# The last action prints what every stage reported, so the build fingerprint
+# (LOCALVERSION) can be checked against the log: SPL, BL31 and OP-TEE banners
+# are on the console before Xen; Xen, Linux and the FF-A transport are
+# printed from dom0.
+#
+# <ARTIFACT_URL> and <ARTIFACT_TOKEN> are filled in by lemans/lava/submit.sh.
+
+device_type: lemans-evk
+job_name: lemans-flash-lava-xen
+priority: medium
+# personal: submit.sh puts the artifact token inline in the deploy URL headers.
+visibility: personal
+context:
+  boot_character_delay: 40
+  test_character_delay: 40
+timeouts:
+  job:
+    minutes: 50
+  connection:
+    minutes: 5
+actions:
+- deploy:
+    to: qdl
+    qcomflash:
+      url: <ARTIFACT_URL>
+      headers:
+        Authorization: <ARTIFACT_TOKEN>
+    timeout:
+      minutes: 25
+- boot:
+    method: qdl
+    firehose_program: prog_firehose_ddr.elf
+    rawprogram: rawprogram0-only-kernel.xml rawprogram1.xml rawprogram2.xml rawprogram3.xml rawprogram4-qupfw.xml rawprogram5.xml
+    patch: patch0.xml
+    storage: ufs
+    debug: true
+    ramdump: true
+    ramdump_timeout: 1800
+    timeout:
+      minutes: 15
+- boot:
+    method: minimal
+    auto_login:
+      login_prompt: 'buildroot login:'
+      username: root
+      login_commands:
+      - sleep 45
+      - dmesg -n 1
+    prompts:
+    - '\n# '
+    timeout:
+      minutes: 15
+- test:
+    timeout:
+      minutes: 5
+    interactive:
+    - name: xen-boot
+      prompts:
+      - '\n# '
+      script:
+      - name: xen-dom0
+        command: grep -qx xen /sys/hypervisor/type && echo "XB""OOT0" done
+        successes:
+        - message: XBOOT0 done
+      - name: versions
+        command: uname -r; xl info | grep -E '^xen_(version|extra)'; dmesg | grep -i -E 'arm_ffa|optee' | head -n 20; echo "XB""OOT1" done
+        successes:
+        - message: XBOOT1 done

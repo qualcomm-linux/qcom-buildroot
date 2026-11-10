@@ -6,11 +6,12 @@ locally attached board. The lab boards are not USB-reachable, so LAVA fetches a
 flat flash tarball over HTTP onto its worker and runs `qdl` there
 (`deploy: to: qdl` + `boot: method: qdl`, `storage: ufs`).
 
-Three jobs:
+Four jobs:
 
 | Job YAML | `make` target it packages | Flashes | rootfs | Runs |
 |---|---|---|---|---|
 | `flash-lava.yaml` | `make flash-lava` | boot chain + kernel (LUNs 0–5, rootfs stripped) | ✗ | — |
+| `flash-lava-xen.yaml` | `make flash-lava` with `XEN=y` (the default on this branch) | as `flash-lava.yaml`; efi.bin boots Xen and dom0 | ✗ | Xen dom0 check, versions |
 | `flash-lava-yocto.yaml` | `make flash-lava-yocto` | complete Yocto release (all 6 LUNs + patches) | ✓ | — |
 | generated from `test-plan` | `make flash-lava-test` | boot chain + kernel | ✗ (UKI rebuilt w/ test overlay) | full test-definitions suite |
 

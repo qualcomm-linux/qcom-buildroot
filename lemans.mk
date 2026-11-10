@@ -1218,7 +1218,12 @@ FLASH_LAVA_STATIC_FILES = \
 
 # Job definitions submitted after packaging (override on the command line, e.g.
 # make flash-lava FLASH_LAVA_JOB=path/to/your.yaml).
+ifeq ($(XEN),y)
+# Xen owns the debug UART and dom0 logs in on hvc0 behind it.
+FLASH_LAVA_JOB       ?= $(CURDIR)/lemans/lava/flash-lava-xen.yaml
+else
 FLASH_LAVA_JOB       ?= $(CURDIR)/lemans/lava/flash-lava.yaml
+endif
 FLASH_LAVA_YOCTO_JOB ?= $(CURDIR)/lemans/lava/flash-lava-yocto.yaml
 
 # flash-lava packages the tarball, then hands it to lemans/lava/submit.sh, which
