@@ -490,7 +490,7 @@
     </div>
     <div class="card" onclick="goTo('s-tests')" style="cursor:pointer;padding:12px 14px">
       <h3 style="font-size:13px;margin-bottom:3px">Tests</h3>
-      <p style="font-size:11px;color:var(--muted)">On-board validation · FastRPC · video · stress-ng</p>
+      <p style="font-size:11px;color:var(--muted)">On-board validation · FastRPC · DSP restart · video · stress-ng</p>
     </div>
     <div class="card" onclick="goTo('s-summary')" style="cursor:pointer;padding:12px 14px">
       <h3 style="font-size:13px;margin-bottom:3px">Summary</h3>
@@ -1963,14 +1963,20 @@ $(eval $(cmake-package))</pre>
       <h3><code style="color:var(--accent)">qcom-tests</code> — bundled bring-up runner</h3>
       <pre style="font-size:11px; padding:10px 14px"><span class="cmt"># Interactive runner — pick step(s); PASS/FAIL per step</span>
 <span class="fn">qcom-tests</span>
-<span class="cmt">#   1) ADSP FastRPC     2) CDSP FastRPC</span>
-<span class="cmt">#   3) VIDEO round-trip 4) CPU stress (stress-ng)</span>
-Choice&gt; <span class="val">1 3</span>      <span class="grn"># blank = all</span>
+<span class="cmt">#   1) ADSP FastRPC      2) CDSP FastRPC</span>
+<span class="cmt">#   3) VIDEO round-trip  4) CPU stress (stress-ng)</span>
+<span class="cmt">#   5) ADSP restart      6) CDSP restart</span>
+Choice&gt; <span class="val">1 3</span>      <span class="grn"># blank/a = all, q = quit</span>
 
 <span class="cmt"># multi-hour CPU soak via stress-ng — logs load +</span>
 <span class="cmt"># thermal-zone temps each minute (watch for throttle)</span>
 <span class="val">STRESS_SECS</span>=<span class="val">14400</span> <span class="fn">qcom-tests</span>   <span class="grn"># 4h, then pick 4</span></pre>
       <p style="font-size:11px; color:var(--muted); margin-top:8px">
+        <strong style="color:var(--text)">1–2)</strong> FastRPC bring-up of aDSP / cDSP (OP-TEE PAS authenticate + boot).
+        <strong style="color:var(--text)">3)</strong> one-pass H.264 encode→decode on the iris codec.
+        <strong style="color:var(--text)">4)</strong> saturates every core, logging load + thermal-zone temps each minute.
+        <strong style="color:var(--text)">5–6)</strong> stop/start aDSP / cDSP through <code>remoteproc</code> sysfs — exercises the full
+        OP-TEE PAS teardown + reload path and confirms the subsystem returns to <code>running</code>.
         We also use <code style="color:var(--accent)">stress-ng</code> for <strong style="color:var(--text)">performance
         metrics</strong> — its per-stressor throughput report (bogo-ops/s) gives a repeatable CPU benchmark.
       </p>
